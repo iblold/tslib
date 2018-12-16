@@ -11,7 +11,7 @@
  import * as zlib from 'zlib';
  import { BaseFn } from './basefunc';
 
- export const MaxPacketSize = 128 * 1024;
+ export const MaxPacketSize = 32 * 1024;
 
  /** 网络连接类型 */
  export class NetType{
