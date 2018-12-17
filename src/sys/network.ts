@@ -2,7 +2,7 @@
  * @Description: 
  * @Date: 2018-12-14 21:05:40
  * @Author: iblold@gmail.com
- * @LastEditTime: 2018-12-17 00:12:52
+ * @LastEditTime: 2018-12-17 14:55:02
  *******************************************************/
  import * as tcpnet from 'net';
  import * as udpnet from 'dgram';
@@ -48,7 +48,7 @@
  /** 服务器基类 */
  export abstract class Server extends NetBase{
      /** 客户端列表 */
-     m_clients: Client[];
+     m_clients: any;
      m_roter: any;
 
      /**
@@ -67,27 +67,33 @@
       * @param msg 消息对象或者消息类型 
       * @param cb 消息接收函数
       */
-     defRpc(msg: any, cb: (conn: Client, params: any)=>void){
+     roter(msg: any, cb: (client: any, params: any)=>void){
         if (typeof msg == 'string'){
             this.m_roter[msg] = cb;
         } else {
             this.m_roter[msg.cmd] = cb;
         }
+        return this;
      }
 
      /**
       * 处理接收到的消息
       * @param msg 接收到的消息
       */
-     dispatcher(conn: Client, msg: any){
+     dispatcher(client: any, msg: any){
         let cb = this.m_roter[msg.cmd||''];
-        if(cb) cb(conn, msg);
+        if(cb) cb(client, msg);
      }
 
      abstract incomming(socket: any): void;
+     abstract defRpc(...p: any): void;
      
      disconnect(client: any){
-        this.m_clients.splice(this.m_clients.indexOf(client), 1);
+         let i = this.m_clients.indexOf(client);
+         if (i >= 0){
+             this.on('dissconnect', client);
+             this.m_clients.splice(i, 1);
+         }
      }
  }
 
@@ -177,20 +183,32 @@
      abstract onData(buffer: any): void;
      abstract send(buffer: Buffer, end: boolean): void;
      abstract close(): void;
+     abstract bindFuncs(socket: any): void;
 
      onError(err: Error|null){
-        this.on('error', err);
+         if (this.m_server){
+             this.m_server.on('error', this, err);
+         } else {
+             this.on('error', err);
+         }
      }
 
      onConnected(){
-        this.on('connected');
-        this.m_lineState = LineState.OnLine;
+         if (this.m_server){
+             this.m_server.on('connected', this);
+         } else {
+             this.on('connected');
+         }
+         this.m_lineState = LineState.OnLine;
      }
     
      onEnd(){
-        this.on('dissconnect');
-        if (this.m_server)
-           this.m_server.disconnect(this);
+       
+        if (this.m_server){
+            this.m_server.disconnect(this);
+        } else {
+            this.on('dissconnect');
+        }
         this.m_lineState = LineState.OffLine;
      }
     
@@ -212,6 +230,8 @@
                  this.m_lineState = LineState.OnLine;
                  this.m_connectedTime = BaseFn.getTimeMS();
                  this.onConnected();
+             } else {
+                 this.close();
              }
          });
      }
@@ -292,7 +312,6 @@
         return this;
      }
 
-     
      dispatcher(buffer: any){
          let str = '';
          if (typeof buffer != 'string'){
@@ -312,7 +331,7 @@
 
         // 消息分发
         if (this.m_server) {
-            this.m_server.dispatcher(jsonmsg, this);
+            this.m_server.dispatcher(this, jsonmsg);
         } else {
             if (jsonmsg.cmd && this.m_roter[jsonmsg.cmd]){
                 this.m_roter[jsonmsg.cmd](jsonmsg);
@@ -357,6 +376,11 @@
         }
         return false;
      }
+
+     defRpc(msg: any, cb: (client: TcpClient, param: any)=>void){
+        this.roter(msg, cb);
+        return this;
+     }
  }
 
  export class TcpClient extends Client{
@@ -369,21 +393,26 @@
          this.m_recvBuffer = Buffer.alloc(MaxPacketSize);
          this.m_recvUsed = 0;
          if (socket){
-            this.m_connectedTime = BaseFn.getTimeMS();
-            this.m_lineState = LineState.OnLine;
-            this.m_remoteAddr = socket.remoteAddress + ':' + socket.remotePort;
+             this.bindFuncs(socket);
+             this.m_connectedTime = BaseFn.getTimeMS();
+             this.m_lineState = LineState.OnLine;
+             this.m_remoteAddr = socket.remoteAddress + ':' + socket.remotePort;
         }
      }
      
+     bindFuncs(socket: tcpnet.Socket){
+        socket.on('error', this.onError.bind(this))
+        .on('data', this.onData.bind(this))
+        .on('end', this.onEnd.bind(this))
+     }
+
      connectTo(host: string, port: number, cb: ()=>void){
         this.m_socket = tcpnet.connect(port, host, ()=>{
             cb();
             this.m_remoteAddr = host + ':' + port;
         });
         
-        this.m_socket.on('error', this.onError.bind(this))
-        .on('data', this.onData.bind(this))
-        .on('end', this.onEnd.bind(this))
+        this.bindFuncs(this.m_socket);
      }
 
      send(buffer: Buffer, end: boolean){
@@ -406,7 +435,8 @@
 
         // 收到错误消息包，断开此链接
         if (!this.checkMsg(this.m_recvBuffer)) {
-            logErr("recive error packet from " + this.m_remoteAddr);
+            // logErr("recive error packet from " + this.m_remoteAddr);
+            this.onError(new Error('recive error packet'));
             this.close();
         } else {
 
@@ -425,8 +455,8 @@
                         if (!err) {
                             this.dispatcher(buff);
                         } else {
-                            logErr('recv zip packet error: ' + err);
-                            this.on('error', err);
+                            // logErr('recv zip packet error: ' + err);
+                            this.onError(err);
                         }
                     });
                 } else {
@@ -474,7 +504,7 @@
      m_httpServer: http.Server|null;
      m_wsServer: websocket.server|null;
      m_protocol: string;
-     
+
      constructor(protocol: string){
          super(NetType.WebSocket);
          this.m_httpServer = null;
@@ -530,6 +560,11 @@
         request.reject();
         return false;
     }
+
+    defRpc(msg: any, cb: (client: WsClient, param: any)=>void){
+        this.roter(msg, cb);
+        return this;
+     }
  }
 
  export class WsClient extends Client {
@@ -539,6 +574,15 @@
         super(NetType.WebSocket, server);
         this.m_socket = socket;
         this.m_url = '';
+        if (socket){
+            this.bindFuncs(socket);
+        }
+    }
+
+    bindFuncs(connection: websocket.connection){
+        connection.on('error', this.onError.bind(this))
+        .on('close', this.onEnd.bind(this))
+        .on('message', this.onData.bind(this));
     }
 
     connectTo(host: string, port: number|null, cb: ()=>void){
@@ -554,11 +598,7 @@
         client.on('connect', connection=>{
             this.m_socket = connection;
             this.m_remoteAddr = host;
-
-            connection.on('error', this.onError.bind(this))
-            .on('close', this.onEnd.bind(this))
-            .on('message', this.onData.bind(this));
-
+            this.bindFuncs(connection);
             cb();
         })
         .on('connectFailed',  err=>{
@@ -589,26 +629,30 @@
         if (msg.type === 'binary') {
             let buff = msg.binaryData;
             if (buff){
-                let flag = buff.readUInt16LE(0);
-                let size = buff.readUInt32LE(2);
+                if (!this.checkMsg(buff)){
+                    // logErr("recive error packet from " + this.m_remoteAddr);
+                    this.onError(new Error('recive error packet'));
+                    this.close();
+                    return;
+                }
+
                 let unzSize = buff.readUInt32LE(6);
-    
                 if (unzSize > 0) {
                     zlib.inflate(buff.slice(10), (err, buff) => {
                         if (!err) {
                             this.dispatcher(buff);
                         } else {
-                            logErr('recv zip packet error: ' + err);
-                            this.on('error', err);
+                            // logErr('recv zip packet error: ' + err);
+                            this.onError(new Error('recive error packet'));
                         }
                     });
                 } else {
                     this.dispatcher(buff.slice(10));
                 }
             }
-        } else if (msg.type == 'utf8' && msg.utf8Data){
+        } /*else if (msg.type == 'utf8' && msg.utf8Data){
             this.dispatcher(msg.utf8Data);
-        }
+        }*/
     }
     
  }

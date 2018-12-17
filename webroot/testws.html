@@ -1,0 +1,44 @@
+<html>
+<head>
+    <script src="utf8.js"></script>
+    <script>
+        function test(){
+        var ws = new WebSocket('ws://localhost:10086/', 'games');
+        ws.onopen = function()
+        {
+            console.log('open');
+            
+            let str = JSON.stringify({cmd:'test', a:100});
+		
+            let buff = [0x34, 0x12, 0, 0, 0, 0, 0, 0, 0, 0];
+            utf16Str2utf8Array(str, buff);
+            
+            let size = buff.length;
+            let ub = new Uint8Array(buff);
+            ub[5] = (size & 0xff000000) >> 24;
+            ub[4] = (size & 0xff0000) >> 16;
+            ub[3] = (size & 0xff00) >> 8;
+            ub[2] = size & 0xff;
+            //this.m_ws.send(ub);
+        
+            ws.send(ub);
+        };
+        ws.onmessage = function(evt)
+        {
+            console.log(evt.data)
+        };
+        ws.onclose = function(evt)
+        {
+            console.log('WebSocketClosed!');
+        };
+         ws.onerror = function(evt)
+        {
+            console.log('WebSocketError!');
+        };
+    }
+    </script>
+</head>
+<body>
+    <input type="button" onclick="test();" value="test!!"/>
+</body>
+</html>

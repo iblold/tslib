@@ -2,7 +2,7 @@
  * @Description: 
  * @Date: 2018-12-15 20:56:32
  * @Author: iblold@gmail.com
- * @LastEditTime: 2018-12-17 00:16:08
+ * @LastEditTime: 2018-12-17 13:00:23
  *******************************************************/
 
 import * as fs from 'fs';
@@ -10,6 +10,7 @@ import {BaseFn} from './basefunc';
 import {TerminalColor as Color} from './terminalcolor';
 import * as path from 'path';
 import * as request from 'request';
+import * as SourceMap from 'source-map';
 
 /** 日志级别 */
 export class LogLevel{
@@ -31,6 +32,7 @@ export class LogFormat{
     static LogColor: number = 1;
     static LogSrcFile: number = 2;
     static LogTime: number = 4;
+    static LogStack: number = 8;
 }
 
 /** 日志类 */
@@ -52,6 +54,8 @@ export class Log{
     /** 日志服务器地址, http post */
     m_url: string;
 
+    m_sourceMps: any;
+
     /**
      * 日志类构造函数
      * @param path 日志路径, 默认当前目录log文件夹
@@ -72,6 +76,7 @@ export class Log{
         ];
         this.m_levelStr = ['[Error]', '[Warning]', '[Info]', '[Debug]'];
         this.m_url = url;
+        this.m_sourceMps = {};
 
         process.on('exit', code=>{
             if(this.m_fd){
@@ -85,12 +90,12 @@ export class Log{
      * @param level 本条日志级别
      * @param str 本条日志内容
      */
-    write(level: LogLevel, str: string){
+    async write(level: number, str: string){
 
         // 有写入目的和合适级别的日志才被处理
         if (this.m_target > 0 && level <= this.m_level){
 
-            str = this.m_levelStr[level] + str;
+            str = this.m_levelStr[level] + ': ' + str;
 
             // 需要记录日志所在行
             if ((this.m_format & LogFormat.LogSrcFile) != 0){
@@ -98,7 +103,30 @@ export class Log{
                 if (st) {
                     let tmp = st.match(/[\s\S]*\(([\s\S]*)\)/) || st.match(/\s*at\s*([\s\S]*)\s*/);
                     if(tmp){
-                        str = '(' + path.basename(tmp[1] ? tmp[1] : '') + '): ' + str; 
+                        let fname = path.basename(tmp[1] ? tmp[1] : '');
+                        let ar = fname.split(':');
+                        let bs = false;
+                        if (ar.length == 3){
+                            let cs:SourceMap.SourceMapConsumer = this.m_sourceMps[ar[0]];
+                            if (!cs){
+                                try{
+                                    let mf: string = tmp[1].replace('.js', '.js.map');
+                                    mf = mf.substr(0, mf.indexOf('p:') + 1);
+                                    let map: any = BaseFn.getFileTxt(mf);
+                                    cs = await new SourceMap.SourceMapConsumer(map);
+                                    this.m_sourceMps[ar[0]] = cs;
+                                } catch(err){}
+                            }
+
+                            if (cs){
+                                let ss = cs.originalPositionFor({line: Number(ar[1]), column: Number(ar[2])});
+                                str = '(' + path.basename(ss.source + '') + ':' + ss.line + ':' + ss.column + ')' + str;     
+                                bs = true;
+                            }
+                        } 
+                        if(!bs){
+                            str = '(' + path.basename(tmp[1] ? tmp[1] : '') + ')' + str; 
+                        }
                     }
                 }
             }
