@@ -1,5 +1,5 @@
 {
-    "port": 80, 		// 端口号
+    "port": 8080, 		// 端口号
     "root": "webroot",	// web根目录
 
     "schedule": null,     // 驻留脚本
