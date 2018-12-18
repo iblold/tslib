@@ -641,7 +641,7 @@
         this.m_httpServer = http.createServer();
 
         this.m_httpServer.on("error", err => {
-            this.on('error', err);
+            this.on('error', null, err);
         });
 
         //在指定的端口监听服务
@@ -656,7 +656,7 @@
                 autoAcceptConnections: false
             });
         } catch (err) {
-            this.on('error', err);
+            this.on('error', null, err);
             return;
         }
 
