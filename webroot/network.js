@@ -189,6 +189,7 @@
          } else if (msg.cmd){
              this.m_router[msg.cmd] = cb;
          }
+         return this;
      }
 
  } 

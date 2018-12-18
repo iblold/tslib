@@ -95,7 +95,7 @@
 	 * @eventId 事件序号
 	 * @params {...array} 回调函数参数
 	 */
-	pushEvent(eventId: string|number, ...params: any){
+	pushEvent(eventId: string|number, ...params: any[]){
 		this.m_queue.push({"eventId":eventId, "params":params, "timeout":1});
 	}
 
@@ -104,11 +104,11 @@
 	 * @eventId {any} 事件标识
 	 * @params {...array} 回调函数参数
 	 */
-	pushEventImm(eventId: string|number, ...params: any){
+	pushEventImm(eventId: string|number, ...params: any[]){
 		this.doEvent(eventId, params);
 	}
 
-    doEvent(eventId: string|number, ...params: any){
+    doEvent(eventId: string|number, ...params: any[]){
         let evt = this._getEvt(eventId);
         if (!evt)
             return;
@@ -125,7 +125,7 @@
 	 * @delay {integer} 延时多久， 单位毫秒
 	 * @params {...array} 回调函数参数
 	 */
-	pushEventDelay(eventId: string|number, delay: number, ...params: any){
+	pushEventDelay(eventId: string|number, delay: number, ...params: any[]){
         //cc.log("pushEventDelay: " + params.length);
 		this.m_queue.push({"eventId":eventId, "params":params, "timeout":delay});
 	}

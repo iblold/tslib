@@ -11,19 +11,19 @@ function main(){
     }
 
     let ws = new network.WsServer('games');
-    ws.on('error', (client: network.WsClient, err: Error)=>{
+    ws.on('error', (client: network.Client, err: Error)=>{
         console.log('error: ' + err.message);
     })
-    .on('newconn', (client: network.WsClient, err: Error)=>{
+    .on('newconn', (client: network.Client, err: Error)=>{
         console.log('newconn: ' + client);
     })
-    .on('dissconnect', (client: network.WsClient, err: Error)=>{
+    .on('dissconnect', (client: network.Client, err: Error)=>{
         console.log('dissconnect: ' + client);
     })
     .on('start', ()=>{
         console.log('ws is runing');
     });
-    ws.defRpc('test', (client: network.WsClient, params: any)=>{
+    ws.defRpc('test', (client: network.Client, params: any)=>{
         console.log('recv:' + JSON.stringify(params));
     })
     .start(10086);

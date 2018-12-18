@@ -107,7 +107,7 @@ export class Log{
                         let ar = fname.split(':');
                         let bs = false;
                         if (ar.length == 3){
-                            let cs:SourceMap.SourceMapConsumer = this.m_sourceMps[ar[0]];
+                            let cs: SourceMap.SourceMapConsumer = this.m_sourceMps[ar[0]];
                             if (!cs){
                                 try{
                                     let mf: string = tmp[1].replace('.js', '.js.map');

@@ -31,7 +31,7 @@
          this.m_callbacks = new Map<string, any>();
      } 
 
-     on(name: string, ...params: any){
+     on(name: string, ...params: any[]){
         if (params.length == 1 && typeof params[0] == 'function'){
             this.m_callbacks.set(name, params[0]);
             return this;
@@ -49,7 +49,7 @@
  export abstract class Server extends NetBase{
      /** 客户端列表 */
      m_clients: any;
-     m_roter: any;
+     m_router: any;
 
      /**
       * 构造函数
@@ -59,7 +59,7 @@
          super(type);
          this.m_type = type;
          this.m_clients = [];
-         this.m_roter = {};
+         this.m_router = {};
      }
 
      /**
@@ -67,11 +67,11 @@
       * @param msg 消息对象或者消息类型 
       * @param cb 消息接收函数
       */
-     roter(msg: any, cb: (client: any, params: any)=>void){
-        if (typeof msg == 'string'){
-            this.m_roter[msg] = cb;
+     router(packetType: any, cb: (client: any, params: any)=>void){
+        if (typeof packetType == 'string'){
+            this.m_router[packetType] = cb;
         } else {
-            this.m_roter[msg.cmd] = cb;
+            this.m_router[packetType.cmd] = cb;
         }
         return this;
      }
@@ -81,12 +81,11 @@
       * @param msg 接收到的消息
       */
      dispatcher(client: any, msg: any){
-        let cb = this.m_roter[msg.cmd||''];
+        let cb = this.m_router[msg.cmd||''];
         if(cb) cb(client, msg);
      }
 
      abstract incomming(socket: any): void;
-     abstract defRpc(...p: any): void;
      
      disconnect(client: any){
          let i = this.m_clients.indexOf(client);
@@ -94,6 +93,17 @@
              this.on('dissconnect', client);
              this.m_clients.splice(i, 1);
          }
+     }
+
+     defRpc(msg: any, cb: (client: Client, param: any)=>any){
+        this.router(msg, (client: Client, param: any)=>{
+            let ret = cb(client, param);
+            if (ret != null && param.rpcid != null){
+                ret.rpcid = param.rpcid;
+                client.sendMsg(ret);
+            }
+        });
+        return this;
      }
  }
 
@@ -109,7 +119,7 @@
      m_connectedTime: number;
      m_sendQueue: any;
      m_rpcQueue: any;
-     m_roter: any;
+     m_router: any;
      m_lastRecvTime: number;
      m_remoteAddr: string;
 
@@ -120,7 +130,7 @@
         this.m_connectedTime = 0;
         this.m_sendQueue = {};
         this.m_rpcQueue = {};
-        this.m_roter = {};
+        this.m_router = {};
         this.m_lastRecvTime = 0;
         this.m_remoteAddr = '';
      }
@@ -145,7 +155,7 @@
              }
      
              // 大于512字节的消息压缩传输
-             zlib.deflate(strBuf, { level: level }, (err, comp) => {
+             zlib.deflate(strBuf, { level: level }, (err: Error|null, comp: any) => {
                  if (err){
                     cb(null);
                  } else {
@@ -303,11 +313,11 @@
         this.sendMsg(obj);
      }
 
-     defMsg(packetType: any, cb: (result: any)=>void){
+     router(packetType: any, cb: (result: any)=>void){
         if (typeof packetType == 'string'){
-            this.m_roter[packetType] = cb;
+            this.m_router[packetType] = cb;
         } else if (packetType.cmd){
-            this.m_roter[packetType.cmd] = cb;
+            this.m_router[packetType.cmd] = cb;
         }
         return this;
      }
@@ -333,8 +343,8 @@
         if (this.m_server) {
             this.m_server.dispatcher(this, jsonmsg);
         } else {
-            if (jsonmsg.cmd && this.m_roter[jsonmsg.cmd]){
-                this.m_roter[jsonmsg.cmd](jsonmsg);
+            if (jsonmsg.cmd && this.m_router[jsonmsg.cmd]){
+                this.m_router[jsonmsg.cmd](jsonmsg);
             }
         }
      }
@@ -375,11 +385,6 @@
             return true;
         }
         return false;
-     }
-
-     defRpc(msg: any, cb: (client: TcpClient, param: any)=>void){
-        this.roter(msg, cb);
-        return this;
      }
  }
 
@@ -560,11 +565,6 @@
         request.reject();
         return false;
     }
-
-    defRpc(msg: any, cb: (client: WsClient, param: any)=>void){
-        this.roter(msg, cb);
-        return this;
-     }
  }
 
  export class WsClient extends Client {
