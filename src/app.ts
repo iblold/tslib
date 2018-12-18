@@ -12,7 +12,7 @@ function main(){
 
     let ws = new network.WsServer('games');
     ws.on('error', (client: network.WsClient, err: Error)=>{
-        logInfo('error: ' + err.message);
+        logInfo('error: ' +err);
     })
     .on('newconn', (client: network.WsClient, err: Error)=>{
         logInfo('newconn: ' + client);

@@ -76,7 +76,7 @@
 
             let buffer;
             let fileReader = new FileReader();
-            fileReader.onload = function(event) {
+            fileReader.onload = (event)=>{
                 buffer = event.target.result;
 
                 let dt = new DataView(buffer);
@@ -111,7 +111,7 @@
                 }
 
             };
-            fileReader.readAsArrayBuffer(blob);
+            fileReader.readAsArrayBuffer(msg.data);
 		}
      }
 
