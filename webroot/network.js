@@ -5,15 +5,18 @@
  * @LastEditTime: 2018-12-17 15:45:31
  */
 
-// const WebSocket = WebSocket || window.WebSocket || window.MozWebSocket;
+ WebSocket = WebSocket || window.WebSocket || window.MozWebSocket;
 
+ /**在线状态 */
  const LineState = {
      None: 0,
-     OffLine: 1,
-     OnLine: 2
+     Connecting: 1,
+     OffLine: 2,
+     OnLine: 3
  }
 
- const WsClient = function(){
+ /**websocket客户端 */
+ const WsClient = function(connectTimeout, reconnInterval){
      this.m_ws = null;
      this.m_url = null;
      this.m_rpcid = 0;
@@ -24,28 +27,39 @@
      this.m_lineState = LineState.None;
      this.m_router = {};
      this.m_callbacks = {};
+     this.m_connectTimeout = connectTimeout || 5000;
+     this.m_reconnInterval = reconnInterval || -1;
 
+     /**
+      * 连接服务器
+      * @param url websocket url ws://url:port/protocol
+      * @param cb 连接回调 err=>{}
+      */
      this.connect = function(url, cb){
+         // 解析url
          let params = url.match(/(ws:\/\/[\w\.:]+)\/*([\w\-\.]*)/);
          if (params && params.length == 3){
             this.m_url = url;
-			this.m_lineState = LineState.OffLine;
+			this.m_lineState = LineState.Connecting;
 			this.m_ws = new WebSocket(params[1], params[2]);
 			this.m_ws.onmessage = this.onData.bind(this);
 			this.m_ws.onerror = this.onError.bind(this);
             this.m_ws.onclose = this.onEnd.bind(this);
             
+            // 连接超时定时器
             let timer = setTimeout(()=>{
-				clearTimeout(timer);
-				this.m_lineState = LineState.None;
-                if(cb) 
-                    cb('connect time out');
-            }, 5000);
+                clearTimeout(timer);
+                if (this.m_lineState == LineState.Connecting){
+                    this.m_lineState = LineState.None;
+                    if(cb) 
+                        cb('connect time out');
+                }
+            }, this.m_connectTimeout);
             
 			this.m_ws.onopen = (ws)=>{
-                if (this.m_lineState == LineState.OffLine){
+                clearTimeout(timer);
+                if (this.m_lineState == LineState.Connecting){
                     this.m_lineState = LineState.OnLine;
-                    clearTimeout(timer);
                     if (cb) 
                         cb(null, this);
                     // 心跳， 每分钟一次
@@ -61,10 +75,16 @@
          }
      }
 
+     /**自动重连 */
      this.reConnect = function(){
-         
+        this.connect(this.m_url, (err)=>{
+            if (!err){
+                console.log('reconnect ok!');
+            }
+        });
      }
 
+     /**断开连接 */
      this.close = function(){
         if (this.m_lineState == LineState.OnLine){
             this.m_ws.close();
@@ -72,10 +92,12 @@
 		}
      }
 
+     /**错误响应函数 */
      this.onError = function(err){
         this.on('error', err);
      }
 
+     /**数据响应函数 */
      this.onData = function(msg){
 		if (typeof msg.data == 'object'){
 
@@ -120,14 +142,21 @@
 		}
      }
 
+     /**断线响应函数 */
      this.onEnd = function(){
          if (this.m_lineState == LineState.OnLine){
              this.on('disconnect');
              this.m_lineState = LineState.OffLine;
-             this.reConnect();
+         }
+
+         if (this.reconnInterval > 0){
+            setTimeout(()=>{
+                this.reConnect();
+            }, this.reconnInterval);
          }
      }
 
+     /**呼吸 */
      this.breath = function(){
 		if (this.m_lineState == LineState.online){
             this.rpc({cmd:'breath', localTime: Math.floor(new Date().getTime() / 1000)}, (err, res)=>{
@@ -143,6 +172,10 @@
 		}
      }
 
+     /**远程调用
+      * @param param 调用参数
+      * @param cb 调用返回回调 (err, result)=>{}
+      */
      this.rpc = function(param, cb){
         if(this.m_lineState == LineState.OnLine){
             if (this.m_rpcid++ > 0xffffff) 
@@ -173,8 +206,11 @@
         }
      }
 
+     /**发送消息
+      * @param msg 消息
+      */
      this.send = function(msg){
-        if (!this.m_ws){
+        if (!this.m_ws || this.m_lineState != LineState.OnLine){
 			return;
         }
         
@@ -197,15 +233,25 @@
 			this.m_sendQueue.shift();
      }
 
-     this.router = function(msg, cb){
-         if(typeof msg == 'string'){
-             this.m_router[msg] = cb;
-         } else if (msg.cmd){
-             this.m_router[msg.cmd] = cb;
+     /**
+      * 设置消息分发回调函数
+      * @param packetType 消息类型或者带cmd字段的对象
+      * @cb 回调函数
+      */
+     this.router = function(packetType, cb){
+         if(typeof packetType == 'string'){
+             this.m_router[packetType] = cb;
+         } else if (packetType.cmd){
+             this.m_router[packetType.cmd] = cb;
          }
          return this;
      }
 
+     /**
+      * 设置事件回调或者调用
+      * @param event 事件名称
+      * @param params 如果是函数则设置，否则调用
+      */
      this.on = function(event, ...params){
         if (typeof params[0] == 'function'){
             this.m_callbacks[event] = params[0];
