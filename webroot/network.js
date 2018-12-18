@@ -5,7 +5,7 @@
  * @LastEditTime: 2018-12-17 15:45:31
  */
 
- const WebSocket = WebSocket || window.WebSocket || window.MozWebSocket;
+// const WebSocket = WebSocket || window.WebSocket || window.MozWebSocket;
 
  const LineState = {
      None: 0,
@@ -13,7 +13,7 @@
      OnLine: 2
  }
 
- const WsClient = WsClient || window.WsClient || function(){
+ const WsClient = function(){
      this.m_ws = null;
      this.m_url = null;
      this.m_rpcid = 0;
@@ -29,22 +29,22 @@
          if (params && params.length == 3){
             this.m_url = url;
 			this.m_lineState = LineState.OffLine;
-			this.m_ws = new WebSocket(url, params[2]);
+			this.m_ws = new WebSocket(params[1], params[2]);
 			this.m_ws.onmessage = this.onData.bind(this);
 			this.m_ws.onerror = this.onError.bind(this);
             this.m_ws.onclose = this.onEnd.bind(this);
             
             let timer = setTimeout(()=>{
 				clearTimeout(timer);
-				this.m_state = LineState.None;
+				this.m_lineState = LineState.None;
                 if(cb) 
                     cb('connect time out');
             }, 5000);
             
 			this.m_ws.onopen = (ws)=>{
                 if (this.m_lineState == LineState.OffLine){
-                    this.m_state = LineState.OnLine;
-                    clearTime(timer);
+                    this.m_lineState = LineState.OnLine;
+                    clearTimeout(timer);
                     if (cb) 
                         cb(null, this);
                     // 心跳， 每分钟一次
@@ -61,7 +61,7 @@
      }
 
      this.close = function(){
-        if (this.m_state == LineState.OnLine){
+        if (this.m_lineState == LineState.OnLine){
             this.m_ws.close();
             clearInterval(this.m_breathTimer);
 		}
@@ -73,36 +73,45 @@
 
      this.onData = function(msg){
 		if (typeof msg.data == 'object'){
-			let dt = new DataView(msg.data);
-			let flag = dt.getUint16(0, true);
-			if (flag != 0x1234){
-				this.onError('recv error packet. ' + flag);
-				return;
-			}
-			let size = dt.getUint32(2, true);
-			let unzSize = dt.getUint32(6, true);
-			
-			let msgbuff = msg.data.slice(10, msg.data.byteLength);
-			let strbuff = null;
-			
-			if (unzSize > 0){
-                let inflate = new Zlib.Inflate(msgbuff)
-				strbuff = new Uint8Array(inflate.decompress());
-			}else{
-				strbuff = new Uint8Array(msgbuff);
-			}
-			
-			let str = utf8Array2utf16Str(strbuff);
-			let packet = JSON.parse(str);
-			
-			if (packet){
-				if(packet.rpcid != null && this.m_rpcs[packet.rpcid]){
-					this.m_rpcs[packet.rpcid](packet);
-				} else if(packet.cmd){
-                    if (this.m_router[packet.cmd])
-                        this.m_router[packet.cmd](packet);
-				}
-			}
+
+            let buffer;
+            let fileReader = new FileReader();
+            fileReader.onload = function(event) {
+                buffer = event.target.result;
+
+                let dt = new DataView(buffer);
+                let flag = dt.getUint16(0, true);
+                if (flag != 0x1234){
+                    this.onError('recv error packet. ' + flag);
+                    return;
+                }
+                let size = dt.getUint32(2, true);
+                let unzSize = dt.getUint32(6, true);
+                
+                let msgbuff = buffer.slice(10, buffer.byteLength);
+                let strbuff = null;
+                
+                if (unzSize > 0){
+                    let inflate = new Zlib.Inflate(msgbuff)
+                    strbuff = new Uint8Array(inflate.decompress());
+                }else{
+                    strbuff = new Uint8Array(msgbuff);
+                }
+                
+                let str = utf8Array2utf16Str(strbuff);
+                let packet = JSON.parse(str);
+                
+                if (packet){
+                    if(packet.rpcid != null && this.m_rpcs[packet.rpcid]){
+                        this.m_rpcs[packet.rpcid](packet);
+                    } else if(packet.cmd){
+                        if (this.m_router[packet.cmd])
+                            this.m_router[packet.cmd](packet);
+                    }
+                }
+
+            };
+            fileReader.readAsArrayBuffer(blob);
 		}
      }
 
@@ -115,7 +124,7 @@
      }
 
      this.breath = function(){
-		if (this.m_state == LineState.online){
+		if (this.m_lineState == LineState.online){
             this.rpc({cmd:'breath', localTime: Math.floor(new Date().getTime() / 1000)}, (err, res)=>{
 				if (err){
 					// 3分钟没心跳认为断线

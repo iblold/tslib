@@ -697,6 +697,7 @@
         this.m_url = '';
         if (socket){
             this.bindFuncs(socket);
+            this.m_lineState = LineState.OnLine;
         }
     }
 

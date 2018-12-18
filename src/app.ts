@@ -25,6 +25,7 @@ function main(){
     })
     ws.defRpc('test', (client: network.Client, params: any)=>{
         logInfo('recv:' + JSON.stringify(params));
+        return {r:params.p + 2000};
     })
     .start(10086);
 }

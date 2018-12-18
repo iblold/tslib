@@ -6,7 +6,7 @@
     <script>
         let client = new WsClient();
        function conn(){
-        client.connect("ws:\\127.0.0.1:10086\games", (err)=>{
+        client.connect("ws://192.168.85.128:10086/games", (err)=>{
             console.log('connect ' + err);
         });
        }
