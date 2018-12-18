@@ -11,6 +11,7 @@
  import * as zlib from 'zlib';
  import { BaseFn } from './basefunc';
 
+ /** 最大消息长度 */
  export const MaxPacketSize = 32 * 1024;
 
  /** 网络连接类型 */
@@ -31,6 +32,18 @@
          this.m_callbacks = new Map<string, any>();
      } 
 
+     /**
+      * 定义或者调用回调函数
+      * 默认回调：
+      * disconnect, 断线事件
+      * error, 发生错误
+      * connected, 连接完成, 对应connect()
+      * start, 服务器启动事件
+      * newconn, 新连接完成事件, 服务器
+      * incomming, 新连接请求事件
+      * @param name 回调函数名称
+      * @param params 调用参数，如果参数是函数，则为定义，否则是调用
+      */
      on(name: string, ...params: any[]){
         if (params.length == 1 && typeof params[0] == 'function'){
             this.m_callbacks.set(name, params[0]);
@@ -85,16 +98,35 @@
         if(cb) cb(client, msg);
      }
 
-     abstract incomming(socket: any): void;
+     /**
+      * 响应连接接入事件
+      * @param socket 连入的链接
+      */
+     abstract onIncomming(socket: any): boolean;
+
+     /**
+      * 启动服务器
+      * @param port 端口
+      */
+     abstract start(port: number): void;
      
-     disconnect(client: any){
+     /**
+      * 响应连接断开事件
+      * @param client 发生断开的连接
+      */
+     onDisconnect(client: any){
          let i = this.m_clients.indexOf(client);
          if (i >= 0){
-             this.on('dissconnect', client);
+             this.on('disconnect', client);
              this.m_clients.splice(i, 1);
          }
      }
 
+     /**
+      * 定义远程调用响应函数
+      * @param msg 消息类型或者带有cmd字段的对象
+      * @param cb 处理此类型消息的回掉函数
+      */
      defRpc(msg: any, cb: (client: Client, param: any)=>any){
         this.router(msg, (client: Client, param: any)=>{
             let ret = cb(client, param);
@@ -107,20 +139,33 @@
      }
  }
 
+ /** 在线状态 */
  export class LineState{
+     /** 未知状态 */
      static None = 0;
+     /** 离线 */
      static OnLine = 1;
+     /** 在线 */
      static OffLine = 2;
  }
 
+ /** 客户端基类 */
  export abstract class Client extends NetBase{
+     /**所属服务器 */
      m_server: Server|null;
+     /**在线状态 */
      m_lineState: LineState;
+     /**连接上的时间，毫秒 */
      m_connectedTime: number;
+     /**发送队列 */
      m_sendQueue: any;
+     /**rpc调用队列 */
      m_rpcQueue: any;
+     /**消息分发函数列表 */
      m_router: any;
+     /**最后接收到消息的时间， 毫秒 */
      m_lastRecvTime: number;
+     /**远端地址 */
      m_remoteAddr: string;
 
      constructor(type: NetType, server: Server|null = null){
@@ -135,6 +180,12 @@
         this.m_remoteAddr = '';
      }
 
+     /**
+      * 包装网络消息
+      * @param msg 消息内容
+      * @param cb 完成后的回调
+      * @param ziped 是否启用压缩
+      */
      private makeMsgBuff(msg: object|string, cb: (buffer: Buffer|null)=>void, ziped: boolean) {
          if (typeof msg == 'object') {
              msg = JSON.stringify(msg);
@@ -185,16 +236,48 @@
          }
      }
 
+     /**
+      * 检查消息头是否合法
+      * @param buffer 消息缓存
+      */
      checkMsg(buffer: Buffer){
         return buffer.readUInt16LE(0) == 0x1234;
      }
      
+     /**
+      * 连接到服务器
+      * @param host 地址
+      * @param port 端口
+      * @param cb 回调
+      */
      abstract connectTo(host: string, port: number, cb: ()=>void): void;
+
+     /**
+      * 网络消息响应函数
+      * @param buffer 网络消息
+      */
      abstract onData(buffer: any): void;
+
+     /**
+      * 发送消息
+      * @param buffer 消息缓存
+      * @param end 发送后是否断开
+      */
      abstract send(buffer: Buffer, end: boolean): void;
+     
+     /**关闭连接 */
      abstract close(): void;
+
+     /**
+      * 绑定默认事件响应函数
+      * @param socket 连接句柄
+      */
      abstract bindFuncs(socket: any): void;
 
+     /**
+      * 响应错误事件
+      * @param err 错误内容
+      */
      onError(err: Error|null){
          if (this.m_server){
              this.m_server.on('error', this, err);
@@ -203,6 +286,7 @@
          }
      }
 
+     /**响应连接成功事件 */
      onConnected(){
          if (this.m_server){
              this.m_server.on('connected', this);
@@ -212,16 +296,22 @@
          this.m_lineState = LineState.OnLine;
      }
     
+     /**响应断开事件 */
      onEnd(){
        
         if (this.m_server){
-            this.m_server.disconnect(this);
+            this.m_server.onDisconnect(this);
         } else {
-            this.on('dissconnect');
+            this.on('disconnect');
         }
         this.m_lineState = LineState.OffLine;
      }
     
+     /**
+      * 连接到服务器
+      * @param host 地址
+      * @param port 端口
+      */
      connect(host: string, port: number){
          if (this.m_lineState == LineState.OnLine){
             this.onError(new Error('connect_online'));
@@ -246,7 +336,11 @@
          });
      }
 
-     sendMsg(obj: object|string){
+     /**
+      * 发送消息
+      * @param msg 消息内容 
+      */
+     sendMsg(msg: object|string){
          if (this.m_lineState != LineState.OnLine){
             logErr('tcpclient offline!');
             return;
@@ -255,7 +349,7 @@
          let packet: any = {};
          let sid = BaseFn.globalID();
          this.m_sendQueue[sid] = packet;
-         this.makeMsgBuff(obj, (buff: Buffer|null)=>{
+         this.makeMsgBuff(msg, (buff: Buffer|null)=>{
              if (buff){
                 packet.state = 1;
                 packet.buffer = buff;
@@ -275,31 +369,40 @@
          }, true);
      }
 
-     sendAndClose(obj: Object){
+     /**
+      * 发送消息并且关闭连接
+      * @param msg 消息内容
+      */
+     sendAndClose(msg: Object){
         if (this.m_lineState != LineState.OnLine){
             logErr('tcpclient offline!');
             return;
          }
 
-         this.makeMsgBuff(obj, (buff: Buffer|null)=>{
+         this.makeMsgBuff(msg, (buff: Buffer|null)=>{
             if(buff) this.send(buff, true);
          }, true);
      }
 
-     rpc(obj: any, cb: (result: any)=>void){
+     /**
+      * 远程调用
+      * @param param 调用参数
+      * @param cb 调用结果回调
+      */
+     rpc(param: any, cb: (result: any)=>void){
         if (this.m_lineState != LineState.OnLine){
             logErr('tcpclient offline!');
             return;
         }
 
         let sid = BaseFn.globalID();
-        obj.rpcid = sid;
+        param.rpcid = sid;
 
         let timer: any = setTimeout(()=>{
             clearTimeout(timer);
             timer = -1;
             delete this.m_rpcQueue[sid];
-            logErr('rpc timeout! msg=' + JSON.stringify(obj));
+            logErr('rpc timeout! msg=' + JSON.stringify(param));
         }, BaseFn._second(10));
 
         this.m_rpcQueue[sid] = (result: any)=>{
@@ -310,9 +413,14 @@
             }
         };
 
-        this.sendMsg(obj);
+        this.sendMsg(param);
      }
 
+     /**
+      * 定义消息分发
+      * @param packetType 消息类型
+      * @param cb 回调函数
+      */
      router(packetType: any, cb: (result: any)=>void){
         if (typeof packetType == 'string'){
             this.m_router[packetType] = cb;
@@ -322,6 +430,10 @@
         return this;
      }
 
+     /**
+      * 消息分发函数
+      * @param buffer 消息
+      */
      dispatcher(buffer: any){
          let str = '';
          if (typeof buffer != 'string'){
@@ -350,6 +462,7 @@
      }
  }
 
+ /** TCP服务器 */
  export class TcpServer extends Server{
      m_server: tcpnet.Server | null;
 
@@ -361,23 +474,28 @@
          });
      }
 
+     /**
+      * 启动服务器
+      * @param port 端口
+      */
      start(port: Number){
-         this.m_server = tcpnet.createServer((socket: tcpnet.Socket)=>{
-             let accept = this.on('incomming', socket);
-             return accept == null ? true : accept;
-         });
+         this.m_server = tcpnet.createServer(this.onIncomming.bind(this));
 
          this.m_server.on('error', err=>{
              this.on('error', err);
          });
 
-         this.m_server.listen(port, undefined, ()=>{
+         this.m_server.listen(port, ()=>{
             this.on('start');
          });
      }
 
-     incomming(socket: tcpnet.Socket){
-        let accept = this.on('incomming', socket);
+     /**
+      * 响应连接接入事件
+      * @param socket 连入的链接
+      */
+     onIncomming(socket: tcpnet.Socket){
+        let accept = this.on('duan', socket);
         if (accept == true || accept == null){
             let conn = new TcpClient(socket);
             this.m_clients.push(conn);
@@ -388,6 +506,7 @@
      }
  }
 
+ /** TCP客户端 */
  export class TcpClient extends Client{
      m_socket: tcpnet.Socket|null;
      m_recvBuffer: Buffer;
@@ -505,6 +624,7 @@
 
  }*/
 
+ /** websocket服务器 */
  export class WsServer extends Server {
      m_httpServer: http.Server|null;
      m_wsServer: websocket.server|null;
@@ -541,16 +661,16 @@
         }
 
         // 连接请求
-        this.m_wsServer.on('request', this.incomming.bind(this));
+        this.m_wsServer.on('request', this.onIncomming.bind(this));
     }
     
-    incomming(request: websocket.request){
+    onIncomming(request: websocket.request){
 
         if (request.requestedProtocols.indexOf(this.m_protocol) === -1) {
             request.reject();
             logWran('client reject. ws protocol wrong. want ' + this.m_protocol
                 + ' get ' + request.requestedProtocols);
-            return;
+            return false;
         }
 
         let accept = this.on('incomming', request);
@@ -567,6 +687,7 @@
     }
  }
 
+ /** websocket客户端 */
  export class WsClient extends Client {
      m_socket: websocket.connection|null;
      m_url: string;
