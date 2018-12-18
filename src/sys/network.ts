@@ -223,7 +223,7 @@
          } else {
              let size = 10 + strBuf.length;
              if (MaxPacketSize < size) {
-                 logErr('net packet size error, size: ' + size);
+                 this.onError(new Error('net packet size error, size: ' + size));
              }
      
              let buff = Buffer.alloc(size);
@@ -342,7 +342,7 @@
       */
      sendMsg(msg: object|string){
          if (this.m_lineState != LineState.OnLine){
-            logErr('tcpclient offline!');
+            this.onError(new Error('tcpclient offline!'));
             return;
          }
             
@@ -375,7 +375,7 @@
       */
      sendAndClose(msg: Object){
         if (this.m_lineState != LineState.OnLine){
-            logErr('tcpclient offline!');
+            this.onError(new Error('tcpclient offline!'));
             return;
          }
 
@@ -389,9 +389,9 @@
       * @param param 调用参数
       * @param cb 调用结果回调
       */
-     rpc(param: any, cb: (result: any)=>void){
+     rpc(param: any, cb: (err: Error|null, result: any)=>void){
         if (this.m_lineState != LineState.OnLine){
-            logErr('tcpclient offline!');
+            this.onError(new Error('tcpclient offline!'));
             return;
         }
 
@@ -402,13 +402,13 @@
             clearTimeout(timer);
             timer = -1;
             delete this.m_rpcQueue[sid];
-            logErr('rpc timeout! msg=' + JSON.stringify(param));
+            cb(new Error('timeout'), null);
         }, BaseFn._second(10));
 
         this.m_rpcQueue[sid] = (result: any)=>{
             if (timer != -1){
                 clearTimeout(timer);
-                cb(result);
+                cb(null, result);
                 delete this.m_rpcQueue[sid];
             }
         };
@@ -442,7 +442,13 @@
             str = buffer;
          }
 
-        let jsonmsg = JSON.parse(str);
+        let jsonmsg = null;
+        try{
+            jsonmsg = JSON.parse(str);
+        } catch(err) {
+            this.onError(new Error('json parse recv packet failed!'));
+        }  
+        
         let rpcid = jsonmsg.rpcid;
 
         // 如果是rpc调用结果
@@ -469,9 +475,6 @@
      constructor(){
          super(NetType.Tcp);
          this.m_server = null;
-         this.on('error', (err: Error)=>{
-            logErr('TcpServer Error:' + (err ? err.message : 'unknow'));
-         });
      }
 
      /**
@@ -482,7 +485,7 @@
          this.m_server = tcpnet.createServer(this.onIncomming.bind(this));
 
          this.m_server.on('error', err=>{
-             this.on('error', err);
+             this.on('error', null, err);
          });
 
          this.m_server.listen(port, ()=>{
@@ -559,7 +562,6 @@
 
         // 收到错误消息包，断开此链接
         if (!this.checkMsg(this.m_recvBuffer)) {
-            // logErr("recive error packet from " + this.m_remoteAddr);
             this.onError(new Error('recive error packet'));
             this.close();
         } else {
@@ -579,7 +581,6 @@
                         if (!err) {
                             this.dispatcher(buff);
                         } else {
-                            // logErr('recv zip packet error: ' + err);
                             this.onError(err);
                         }
                     });
@@ -668,8 +669,8 @@
 
         if (request.requestedProtocols.indexOf(this.m_protocol) === -1) {
             request.reject();
-            logWran('client reject. ws protocol wrong. want ' + this.m_protocol
-                + ' get ' + request.requestedProtocols);
+            this.on('error', new Error('client reject. ws protocol wrong. want ' + this.m_protocol
+                + ' get ' + request.requestedProtocols));
             return false;
         }
 
@@ -711,7 +712,7 @@
 
         let tmp = host.match(/(ws:\/\/[\w\.:]+)\/*([\w\-\.]*)/);
         if (!tmp || tmp.length != 3) {
-            logErr('websocket connect failed. url error: ' + host);
+            this.onError(new Error('websocket connect failed. url error: ' + host));
             return;
         }
 
@@ -752,7 +753,6 @@
             let buff = msg.binaryData;
             if (buff){
                 if (!this.checkMsg(buff)){
-                    // logErr("recive error packet from " + this.m_remoteAddr);
                     this.onError(new Error('recive error packet'));
                     this.close();
                     return;
@@ -764,7 +764,6 @@
                         if (!err) {
                             this.dispatcher(buff);
                         } else {
-                            // logErr('recv zip packet error: ' + err);
                             this.onError(new Error('recive error packet'));
                         }
                     });
