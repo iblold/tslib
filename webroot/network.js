@@ -23,6 +23,7 @@
      this.m_breathTimer = null;
      this.m_lineState = LineState.None;
      this.m_router = {};
+     this.m_callbacks = {};
 
      this.connect = function(url, cb){
          let params = url.match(/(ws:\/\/[\w\.:]+)\/*([\w\-\.]*)/);
@@ -58,6 +59,10 @@
                  cb('connect failed!');
              }
          }
+     }
+
+     this.reConnect = function(){
+         
      }
 
      this.close = function(){
@@ -201,4 +206,15 @@
          return this;
      }
 
+     this.on = function(event, ...params){
+        if (typeof params[0] == 'function'){
+            this.m_callbacks[event] = params[0];
+            return this;
+        } else {
+            let cb = this.m_callbacks[event];
+            if(cb){
+                cb.apply(null, params);
+            }
+        }
+     }
  } 
