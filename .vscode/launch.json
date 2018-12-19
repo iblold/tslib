@@ -8,11 +8,14 @@
             "type": "node",
             "request": "launch",
             "name": "Launch Program",
-            "program": "${workspaceFolder}/src/app.ts",
+            "program": "${workspaceFolder}/src/tools/prototools.ts",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ],
-            "preLaunchTask": "tsc"
+            "preLaunchTask": "tsc",
+            "args": [
+                "-i", "a.txt", "-o", "a.ts", "-l", "ts", "-dts"
+            ]
         }
     ]
 }

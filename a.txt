@@ -1,0 +1,1026 @@
+﻿/*
+	客户端和服务器间消息定义
+*/
+       
+//! 客户端和服务器间的消息定义
+
+//! 测试内容
+const int8 ctest = 0;
+
+//! 枚举错误信息定义
+enum ECodes{
+	//! 通用:操作成功
+	oper_ok =  0,
+
+	//! 用户已在线
+	login_online,
+	
+	//! 用户id被锁定，黑名单
+	login_idlocked,	
+	
+	//! 用户ip被锁定，黑名单
+	login_iplocked,	
+	
+	//! 用户不存在
+	login_nouser,	
+	
+	//! 用户密码错
+	login_passwd_wrong,
+	
+	//! 客户端版本不匹配
+	login_version_wrong,	
+	
+	//! 渠道错误
+	login_channel_wrong,
+
+	//! 数据库错误
+	login_dbase_wrong,
+	
+	//! 未知错误
+	login_unknow,		
+	
+	//! 服务器维护中
+	server_maintenance,	
+	
+	//! 服务器不存在
+	server_notexist,
+	
+	//! 服务器没响应
+	server_noresp,
+	
+	//! 注册用户已存在
+	register_exist,
+	
+	//! 钻石不足
+	diamond_not_enough
+	
+	
+}
+//! 游戏服务器信息
+struct GsInfo{
+	//! 游戏服务器id
+	uint16 uid;
+	//! 游戏服务器名称
+	string name;
+}
+
+//! 游戏服务器列表 Gate->Client
+protocol GsList{
+	GsInfo infos[];
+}
+protocol checkVersion{
+	req{
+		string version;
+	}
+	resp{
+		//! code = 0版本ok，code =  1版本低但可以继续使用，code = 2版本低强制升级
+		int32 code;
+	}
+}
+//! 登录消息 Client <-> Gate <-> Account
+protocol Login{
+	//! 登录请求
+	req{
+		//! 用户凭据
+		string usertoken;
+		//! 密码
+		string passwd;
+		//! 渠道号
+		string channel;
+		//! 设备信息
+		string device;
+		//! imei
+		string imei;
+		//! imsi
+		string imsi;
+	}
+	
+	//! 登录结果
+	resp{
+		//! 登录返回值
+		int16 code;
+		//! 错误信息，在code!=0的时候有值
+		string errmsg;
+		//! 用户id
+		uint32 tuid;	
+		//! 加密key
+		string key;
+	}
+}
+
+struct UserData_{
+	//! 用户id
+	int32 UserID;
+	//! 用户名
+	string UserName; 
+	//! 用户级别
+	int8 UserLevel;
+	//! 用户经验
+	int32 UserExp;
+	//! 体力
+	int16 UserStamina;
+	//! 非充值货币
+	int32 FreeMoney;
+	//! 游戏币
+	int32 Gold;
+	//! 充值货币
+	int32 Money;
+	//! 拥有服装id
+	int32 clothes[];
+	//! 当前服装
+	int32 curClothID;
+	//! 活动券数量
+	int32 ticket;
+	//! 已经绑定地表账号
+	string phone;
+}
+//! 同步用户数据，所有或者局部
+protocol SyncUserInfo
+{
+	//! 用户数据
+	UserData_ userInfo;
+}
+
+//! 登录游戏服务器 client<->gate<->gs
+protocol LoginGs{
+	req{
+		//! 游戏服务器id
+		uint32 gsid;
+	}
+	
+	resp{
+		//! 登录结果
+		int16 code;
+		//! 服务器时间
+		int32 serverTime;
+		//! 用户数据
+		UserData_ userInfo;
+		//! 是否设置过名称
+		int32 isSetNick;
+	}
+}
+//! 心跳消息 client<->gate
+protocol Ping{
+	req{
+		int32 ms;
+	}
+	
+	resp{
+		int32 ms;
+	}
+}
+//! 心跳消息
+protocol Breath
+{
+	req{
+		//! 本地时间
+		uint32 localTm;	
+	}
+	
+	resp{
+		//! 本地时间
+		uint32 localTm;	
+		//! 服务器回复时的时间
+		uint32 serverTm;
+	}
+}
+//! 充值
+protocol Charge
+{
+	req{
+		//! 商品id
+		uint32 gid;
+	}
+	resp{
+		//! 微信平台的appid
+		string appID;
+		//! 商户id
+		string mch_id;
+		//! 预支付id
+		string prepayID;
+		//! 随机串
+		string nonce_str;
+		//! 时间戳
+		string timeStamp;
+		//! 签名
+		string sign; 
+	}
+}
+//! 支付结果查询
+protocol ChargeResult
+{
+	req{
+		//! 订单号
+		string orderId;
+	}
+	resp{
+		//返回码
+		uint32 code;	
+	}
+}
+struct stageInfo
+{
+	int32 stageID;
+	//是否达成圆满，0= false，1 = true
+	int32 complete;
+}
+//！ 请求关卡列表状态
+protocol stageListState
+{
+	req{
+	}
+	resp{
+		//! 通关最高关卡
+		int32 maxStageTraffic;
+		int32 maxStageNinjia;
+		//! 关卡信息
+		stageInfo stageInfosTraffic[];
+		stageInfo stageInfosNinjia[];
+	}
+}
+//! 请求开跑
+protocol startStage
+{
+	req{
+		//! 关卡id;
+		uint32 stageID;
+		//! 是否免费 0 = false，1=true
+		uint32 free;
+	}
+	resp{
+		//返回码 code = 3活动券不足
+		uint32 code;
+		//! 关卡id;
+		uint32 stageID;
+	}
+}
+//! 获取活动关免费次数
+protocol getFreeCount
+{
+	req{
+	}
+	resp{
+		//! 剩余次数
+		uint32 lastCount;
+		//! 总次数
+		uint32 allCount;
+	}
+}
+//! 请求复活
+protocol buyLife
+{
+	req{
+		//! 关卡id;
+		uint32 stageID;
+		//! 类型 1 = 钻石买活  2 = 看广告复活
+		uint32 type;
+	}
+	resp{
+		//! 返回码 0 = ok，1 = 钻石不足， 2 = 广告复活次数已用完
+		uint32 code;
+		//! 刷新钻石数
+		uint32 diamond;
+		//! 类型 1 = 钻石买活  2 = 看广告复活
+		uint32 type;
+	}
+}
+//! 结算上传结果
+protocol uploadResult
+{
+	req{
+		//! 场景类型 traffic/ninjia
+		string sceneType;
+		//! 关卡id
+		uint32 stageID;
+		//! 长度
+		uint32 length;
+		//! 总时间
+		uint32 time;
+		//! 二速时间
+		uint32 time2;
+		//! 三速时间
+		uint32 time3;
+		//! 星星
+		uint32 stars;
+		//! 是否通关
+		uint32 isFinish;
+		//! 剩余命
+		uint32 lifeCount;
+		//! 捡到磁铁数
+		uint32 getCTCount;
+		//！ 捡到心
+		uint32 getHeartCount;
+		//! 捡到超级跳数
+		uint32 getShoesCount;
+	}
+	resp{
+		//! 返回码
+		uint32 code;
+		//! 综合评分
+		uint32 score;
+		//! 是否是历史最高 0 = false，1 = true
+		uint32 isMax;
+		//! 是否圆满
+		uint32 isComplete;
+	}
+}
+struct RankCell{
+	//! 用户id
+	int32 UserID;
+	//! 用户名
+	string UserName; 
+	//! 用户排名
+	int32 UserRank;
+	//! 用户分数
+	int32 Score;	
+	//! 分数来自哪个关卡
+	int32 From;
+}
+//! 请求排行榜数据
+protocol rankList
+{
+	req{
+		//! 起始位置，从0开始
+		int32 reqIndex;
+		//! 排行榜类型 ，0 = 关卡排行，1 = 无限排行，2 = 活动排行
+		int32 reqType;
+		//! 场景类型 traffic/ninjia
+		string sceneType;
+	}
+	resp{
+		//! code = 0 正常， code = 1 排行榜关闭
+		int32 code;
+		//! 排行榜n条信息
+		RankCell rankInfo[];
+		//! 自己的排名,从1开始,0表示未上榜
+		int32 selfRank;
+		int32 selfScore;
+		//！剩余条数
+		int32 lastCount;
+		//! 排行榜类型 ，0 = 关卡排行，1 = 无限排行，2 = 活动排行
+		int32 reqType;
+		//! 场景类型 traffic/ninjia
+		string sceneType;
+	}
+}
+//任务结构体
+struct Task{
+	//! 类型 0 = 日常 1 = 成长 2 = 成就
+	int32 type;
+	int32 id;
+	//! 是否达成
+	int32 finished; 
+	//! 是否已领取
+	int32 received;
+	
+	//! 描述
+	string describe;
+	//! 已完成数量
+	int32 getCount;
+	//! 任务需要数量
+	int32 allCount;
+	//! 任务奖励，金币数量
+	int32 goldCount;
+	//! 任务奖励，钻石数量
+	int32 diamondCount;
+}
+//获取任务列表
+protocol taskList
+{
+	req{
+	}
+	resp{
+		int32 timeStamp;
+		Task list[];
+	}
+}
+//完成任务
+protocol finishTask
+{
+	req{
+		//! 完成任务id
+		int32 finshTaskID;
+		//! 完成任务type
+		int32 type;
+	}
+	resp{
+		//! 返回码
+		int32 code;
+	}
+}
+//获取任务奖励
+protocol taskAward
+{
+	req{
+		//! 任务id
+		int32 taskID;
+		//! 任务type
+		int32 type;
+	}
+	resp{
+		//! 任务id
+		int32 taskID;
+		//! 任务type
+		int32 type;
+		//! 返回码 0 =  成功   1 = 任务未达成   2 = 已领取   3 = 没有该任务
+		int32 code;
+		//! 获得的金币数量
+		int32 goldCount;
+		//! 获得的钻石数量
+		int32 diamondCount;
+		//! 刷新任务列表
+		Task list[];
+	}
+}
+//! 结算掉落结构
+struct gift{
+	//! 掉落物id
+	int32 itemId;
+	//! 数量	
+	int32 count;			
+}
+struct mailInfo
+{
+	int32 ID 		    //ID
+	string mail_title	//邮件标题
+	gift ItemList[];	//物品列表
+	int32 status		//邮件状态 0未读，1已读
+	string mail_text	//邮件内容
+	int32 send_time	    //发送时间
+    int32 remove_time	//到期时间 值为“0”时代表永久
+	int32 isGet         // 0 = false ,1  true;
+	string Sender		//发件人名字
+}
+//! 请求邮件列表
+protocol getMailList
+{
+	req{
+		
+	}
+	resp{
+		mailInfo mailList[];
+	}
+}
+//! 邮件设置为已读状态
+protocol setMailReaded
+{
+	req{
+		//! 邮件id数组
+		uint32 mailIDs[];
+	}
+	resp{
+	//! 邮件id数组
+		uint32 mailIDs[];
+	}
+}
+
+//! 领取邮件中的道具
+protocol getMailItems
+{
+	req{
+		//! 邮件id数组
+		uint32 mailIDs[];
+	}
+	
+	resp{
+		//! 领取邮件的ID列表
+		uint32 mailIDs[];
+		gift mailAwards[];
+	}
+}
+//! 公告结构
+struct Announce
+{
+	//公告id
+	int32 id;
+	//! 公告标题
+	string title;
+	//! 公告内容
+	string content;
+	//! 公告时间
+	int32 timeStamp;
+}
+protocol getAnnounce
+{
+	req{
+	}
+	resp{
+		Announce anns[];
+	}
+}
+//解锁服装
+protocol buyCloth
+{
+	req{
+		int32 clothID;
+	}
+	resp{
+		int32 code;
+	}
+}
+//改昵称
+protocol changeName
+{
+	req{
+		string name;
+	}
+	resp{
+		int32 code;
+	}
+}
+//注册
+protocol regist{
+	req{
+		string account;
+		string password;
+		string phoneNum;
+	}
+	resp{
+		//! 0=成功 
+		int32 code;
+		string errmsg;
+	}
+}
+
+//! 使用道具
+protocol useItem
+{
+	req{
+		int32 itemId;		
+	}
+	resp{
+		//! 0=成功 
+		int32 code;
+		string errmsg;
+	}
+}
+struct itemPrice
+{
+	uint32 itemid;
+	//! type == ‘gold’:金币   type == 'diamond':钻石
+	string type;
+	uint32 num;
+}
+protocol getItemPrice
+{
+	req{
+		uint32 itemids[];
+	}
+	resp{
+		itemPrice prices[];
+	}
+}
+
+//! 购买道具
+protocol buyItem
+{
+	req{
+		int32 itemId;		
+	}
+	resp{
+		//! 0=成功 
+		int32 code;
+		string errmsg;
+	}
+}
+
+//! 道具列表
+protocol itemList
+{
+	req{
+			
+	}
+	resp{
+		//! 已有道具列表
+		gift items[];
+	}
+}
+protocol pushState
+{
+	//任务 type = 0;邮件 type = 1;公告 type = 2;
+	int32 type;
+}
+/////////////////////////////////////////////////////////***********以下为GM协议**************////////////////////////////////////////////
+
+//! 创建公告
+protocol setAnn{
+	req{
+		//! 公告标题
+		string title;
+		//! 公告内容
+		string content;
+	}
+	resp{
+		//! 返回码，0=成功
+		int32 code;
+		//! 错误信息
+		string errmsg;
+	}
+}
+//! 删除公告
+protocol delAnn{
+	req{
+		//! 公告id
+		string title;
+	}
+	resp{
+		//! 返回码，0=成功
+		int32 code;
+		//! 错误信息
+		string errmsg;
+	}
+}
+
+//! 群发邮件
+protocol sendmail{
+	req{
+		//! 是否是发给所有玩家，1 = 是
+		int32 isAll;
+		//! 接收邮件的玩家id数组
+		int32 uids[];
+		//! 邮件标题
+		string title;
+		//! 邮件内容
+		string content;
+		//! 邮件附件
+		gift items[];
+	}
+	resp{
+		//! 返回码，0=成功
+		int32 code;
+		//! 错误信息
+		string errmsg;
+	}
+}
+struct chargeInfo
+{
+	//! 时间
+	uint32 timeStamp;
+	//! 订单号
+	string order;
+	//! 数额
+	uint32 count;
+	//! 描述
+	string describe;
+}
+//! 封禁/解封账号
+protocol operAccount
+{
+	req{
+		//! 玩家id
+		int32 targetId;
+		//! 0 = 非永久，1 = 永久
+		int32 isForever;
+		//! 封禁的天数
+		int32 days;
+		//! 0 = 封禁，1 = 解封账号
+		int32 type;
+	}
+	resp{
+		//! 返回码，0=成功
+		int32 code;
+		//! 错误信息
+		string errmsg;
+	}
+}
+//! 获取用户充值/消费信息
+protocol moneyInfo
+{
+	req{
+		//! 玩家id
+		int32 targetId;
+		
+	}
+	resp{
+		string nickName;
+		int32 diaCount;
+		chargeInfo list[];
+	}
+}
+protocol changeCloth
+{
+	req{
+		int32 clothID;
+	}
+	resp{
+		//! 返回码 0=成功 1=未拥有的服装
+		int32 code;
+	}
+}
+//! 活动关结构体
+struct structActivity
+{
+	//! 活动关id
+	int32 id;
+	//! 显示时间
+	int32 show;
+	//! 开始时间
+	int32 start;
+	//! 结束时间
+	int32 endLine;
+	//! 隐藏时间
+	int32 hide;
+}
+//! 活动关推送
+protocol pushActivity
+{
+	structActivity activity;
+}
+//! GM开活动
+protocol createActivity
+{
+	req{
+		structActivity activity;
+	}
+	resp{
+		string msg;
+	}
+}
+//! 绑定地表最强账号
+protocol bindPhone
+{
+	req{
+		//! 手机号
+		string phone;
+	}
+	resp{
+		//! 错误信息，为空表示成功
+		string errmsg;
+	}
+}
+//! 礼包码兑换
+protocol codeExchange
+{
+	req{
+		//! 礼包码
+		string code;
+	}
+	resp{
+		//! 错误信息，为空表示成功
+		string errmsg;
+		//! 礼包
+		gift ItemList[];	//物品列表
+	}
+}
+//! 金币加倍
+protocol doubleGold
+{
+	req{
+		//! 获得的金币数量
+		uint32 gold;
+	}
+	resp{
+		//!加倍后的数量
+		uint32 gold;
+	}
+}
+//! 发送绑定邮箱验证码
+protocol sendMailCode
+{
+	req{
+		//! 邮箱地址
+		string mail;
+	}
+	resp{
+		string errmsg;
+	}
+}
+//! 验证邮箱验证码
+protocol checkMailCode
+{
+	req{
+		//! 邮箱地址
+		string mail;
+		//验证码
+		string code;
+	}
+	resp{
+		string errmsg;
+	}
+}
+//! 修改密码-获取验证码
+protocol getMailCode
+{
+	req{
+		//! 账号
+		string account;
+	}
+	resp{
+		string errmsg;
+	}
+}
+//! 修改密码-忘记密码
+protocol forgetPw
+{
+	req{
+		//! 账号
+		string account;
+		//! 新密码MD5
+		string password;
+		//! 验证码
+		string code;
+	}
+	resp{
+		string errmsg;
+	}
+}
+//! 修改密码-记得原密码
+protocol changePw
+{
+	req{
+		//! 旧密码md5
+		string oldPw;
+		//! 新密码md5
+		string newPw;
+	}
+	resp{
+		string errmsg;
+	}
+}
+//! 快速注册
+protocol autoRegist
+{
+	req{
+	}
+	resp{
+		string account;
+		string password;
+	}
+}
+//! ios充值成功请求服务器确认
+protocol chargeFinish
+{
+	req{
+		//! 产品id
+		string id;
+		//! 订单id
+		string TransactionID;
+		//! 凭证
+		string receipt;
+	}
+	resp{
+		//! 0 = ok,1 = 与苹果服务器通信失败，2 = 验证未通过
+		int32 code;
+	}
+}
+
+//! 位置
+struct Vec3
+{
+	float x;
+	float y;
+	float z;
+}
+//! 子状态（道具，技能类）
+struct SubState
+{
+	int32 itemID;
+	int32 itemState;
+}
+
+//! 游戏状态
+struct GameState
+{
+	//! 用户id
+	uint32 playerid;
+	//! 状态
+	int32 state;
+	//! 道具状态参数
+	SubState itemState[];
+	//! 技能状态参数
+	SubState skillState[];
+	//! 金币道具状态参数
+	SubState itemBuyState[];
+	//! 时间戳
+	uint32 timeStamp;
+	//! 速度
+	float speed;
+	//! 位置
+	Vec3 pos;
+	//! 朝向
+	Vec3 direction;
+}
+
+
+
+//! 报告服务器自己的状态
+protocol reportState
+{
+	req{
+		//! 用户id
+		uint32 playerid;
+		//! 状态
+		int32 state;
+		//! 道具状态参数
+		SubState itemState[];
+		//! 技能状态参数
+		SubState skillState[];
+		//! 金币道具状态参数
+		SubState itemBuyState[];
+		//! 时间戳
+		uint32 timeStamp;
+		//! 速度
+		string speed;
+		//! 位置
+		string pos_x;
+		string pos_y;
+		string pos_z;
+		//! 朝向
+		string dir_x;
+		string dir_y;
+		string dir_z;
+	}
+	
+	resp{
+	}
+}
+
+//! 状态同步
+protocol StateSync
+{
+	GameState states[];
+}
+
+//! 请求房间
+protocol applyRoom
+{
+	req{
+	}
+	resp{
+		int32 roomid;
+	}
+}
+
+//! 请求创建房间
+protocol createRoom
+{
+	req{
+	}
+	resp{
+		int32 roomid;
+	}
+}
+
+//! 请求加入房间
+protocol joinRoom
+{
+	req{
+		int32 roomid;
+	}
+	resp{
+		int32 result;
+	}
+}
+
+//! 请求离开房间
+protocol leaveRoom
+{
+	req{
+	}
+	resp{
+		int32 result;
+	}
+}
+
+//! 房间内需要的用户信息
+struct GamePlayerInfo
+{
+	uint32 playerid;
+	int32 avatar;
+	string name;
+}
+
+//! 有人进入房间
+protocol playerEnterRoom
+{	
+	GamePlayerInfo playerInfo;
+}
+
+//! 有人离开房间 s->c
+protocol playerLeaveRoom
+{
+	int32 playerid;
+	int32 landlord;
+}
+
+//! 游戏开始通知 s->c
+protocol gameStart
+{
+}
+
+//! 游戏参与者信息 s->c
+protocol playerList
+{
+	GamePlayerInfo playerInfos[];
+	int32 landlord;
+}
+
+//! 申请开始游戏 c->s
+protocol applyStartGame
+{
+	req{
+	}
+	resp{
+		int32 result;
+	}
+}
