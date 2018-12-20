@@ -252,7 +252,7 @@
       * @param port 端口
       * @param cb 回调
       */
-     abstract connectTo(host: string, port: number, cb: ()=>void): void;
+     protected abstract connectTo(host: string, port: number, cb: ()=>void): void;
 
      /**
       * 网络消息响应函数
@@ -535,7 +535,7 @@
         .on('end', this.onEnd.bind(this))
      }
 
-     connectTo(host: string, port: number, cb: ()=>void){
+     protected connectTo(host: string, port: number, cb: ()=>void){
         this.m_socket = tcpnet.connect(port, host, ()=>{
             cb();
             this.m_remoteAddr = host + ':' + port;
@@ -709,7 +709,7 @@
         .on('message', this.onData.bind(this));
     }
 
-    connectTo(host: string, port: number|null, cb: ()=>void){
+    protected connectTo(host: string, port: number|null, cb: ()=>void){
 
         let tmp = host.match(/(ws:\/\/[\w\.:]+)\/*([\w\-\.]*)/);
         if (!tmp || tmp.length != 3) {

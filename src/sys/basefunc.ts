@@ -363,6 +363,12 @@ export class BaseFn{
         return results
     }
 
+    /**
+     * 移动Buffer一段内容到自身的其他地方
+     * @param buffer Node Buffer
+     * @param from 
+     * @param to 
+     */
     static moveBufferSelf(buffer: Buffer, from: {begin: number, end: number}, to: {begin: number, end: number}){
         (<any>global)._movetoself_temp = (<any>global)._movetoself_temp || Buffer.alloc(BaseFn._MB(1));
         if ((from.begin < to.begin && from.end < to.begin) || (to.begin < from.begin && to.end < from.end)){
@@ -372,6 +378,11 @@ export class BaseFn{
             buffer.copy(temp, 0, from.begin, from.end);
             temp.copy(buffer, to.begin, 0, from.end - from.begin);
         }
+    }
+
+    /**去掉字符串前后空白 */
+    static trimlr(str:string) {
+        return str.replace(/(^\s*)|(\s*$)/g, '');
     }
 
     /** 返回n兆的字节数 */

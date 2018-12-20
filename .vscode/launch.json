@@ -8,14 +8,15 @@
             "type": "node",
             "request": "launch",
             "name": "Launch Program",
-            "program": "${workspaceFolder}/src/tools/prototools.ts",
+            "program": "${workspaceFolder}/src/example/chatserver/server.ts",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ],
             "preLaunchTask": "tsc",
             "args": [
-                "-i", "./src/example/protocol.txt", "-o", "a.cs", "-l", "cs", "-dts"
-            ]
+               // "-i", "./src/example/protocol.txt", "-o", "a.cs", "-l", "cs", "-dts"
+            ],
+            "console": "integratedTerminal"
         }
     ]
 }

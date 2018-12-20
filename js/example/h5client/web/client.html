@@ -1,0 +1,59 @@
+<html>
+<head>
+    <meta charset="utf8">
+    <script src="utf8.js"></script>
+    <script src="zlib.min.js"></script>
+    <script src="network.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="jquery-1.8.3.min.js" ></script>
+    <script src="protocol.js"></script>
+    <script>
+        let client = new WsClient();
+
+        let msgs = [];
+        client.router(protocol.ChatSync, chat=>{
+            if (chat.chatMsg) msgs.push(chat.chatMsg[0]);
+
+            let str = '';
+            for(let i = 0; i < msgs.length; i++){
+                str += msgs[i] + '<br>';
+            }
+
+            $('#msgList').html(str);
+        })
+        .router(protocol.UserinfoSync, info=>{
+            $('#msgList').html('userinfo: ' + JSON.stringify(info));
+        });
+
+       function conn(){
+        client.connect($('#url').val(), (err)=>{
+            console.log('connect ' + err);
+        });
+       }
+
+       function login(){
+           let name = $('#name').val();
+           let passwd = $('#passwd').val();
+           client.rpc(new protocol.Login_req(name, passwd), (err, result)=>{
+               console.log(result);
+           });
+       }
+
+       function send(){
+            let msg = $('#chat').val();
+            client.send(new protocol.Chat(msg));
+       }
+    </script>
+</head>
+<body>
+    <input type="text" id="url" value="ws://127.0.0.1:10086/games" />
+    <input type="button" onclick="conn();" value="连接"/><br>
+    <input type="text" id="name" value="test" />
+    <input type="text" id="passwd" value="123456" />
+    <input type="button" onclick="login();" value="登录"/><br>
+    <input type="text" id="chat" value="chat message"/>
+    <input type="button" onclick="send();" value="发送"/><br>
+
+    <span id="msgList"></span>
+
+</body>
+</html>

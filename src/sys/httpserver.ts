@@ -89,9 +89,23 @@ export class HYHttpServer {
 
     init(configFile: string) {
         this.m_config = eval('(' + fs.readFileSync(path.normalize(configFile)) + ')');
+
+        let curPath = path.dirname(configFile);
+        let root = this.m_config.root;
+        if (!fs.existsSync(root)){
+            let tmp = path.join(curPath, root);
+            if (fs.existsSync(tmp)){
+                this.m_config.root = tmp;
+            } else {
+                logErr('root path not exist: ' + this.m_config.root);
+                return false;
+            }
+        }
+
         if (this.m_config) {
             return true;
         } else {
+            logErr('load web config failed.');
             return false;
         }
     }

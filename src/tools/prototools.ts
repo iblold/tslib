@@ -455,8 +455,8 @@ function makeProtocolTS(blocks: Block[]): string|null{
     
     // 生成结构体和协议结构体
     let makeStruct = (block: Block, isProtocol = false)=>{
-        
-        outer += tc.v() + 'export class ' + (block.parent ? block.parent.name + '_' : '') + block.name + '{' + crlf;
+        let blockName = (block.parent ? block.parent.name + '_' : '') + block.name;
+        outer += tc.v() + 'export class ' + blockName + '{' + crlf;
 
         tc.push();
 
@@ -468,6 +468,7 @@ function makeProtocolTS(blocks: Block[]): string|null{
                 cmd = block.name;
             }
             outer += tc.v() + 'static cmd = \'' + cmd + '\';' + crlf; 
+            outer += tc.v() + 'cmd: string;' + crlf; 
         }
 
         let ctorSubject = 'constructor(_params_){' + crlf;
@@ -486,6 +487,10 @@ function makeProtocolTS(blocks: Block[]): string|null{
                 + ' = ' + (member.isArray ? '[]' : typeMap.getDefault(member.type)) 
                 + (j < block.members.length - 1 ? ', ' : '');
         }
+
+        tc.push();
+        ctorSubject += tc.v() + 'this.cmd = ' + blockName + '.cmd' + crlf;
+        tc.pop();
 
         outer += tc.v() + ctorSubject.replace('_params_', ctorParams) + crlf;
         outer += tc.v() + '}' + crlf;
@@ -622,7 +627,7 @@ function makeDTS(blocks: Block[]){
 function makeProtocolJS(blocks: Block[]){
     let tc = new TabCache();
     let outer = '"use strict";' + crlf 
-    outer += tc.v() + '// ' + (<any>blocks).rem + crlf + 'global.protocol = global.protocol || {};' + crlf;
+    outer += tc.v() + '// ' + (<any>blocks).rem + crlf + 'window.protocol = window.protocol || {};' + crlf;
     tc.push();
 
     // 输出成员的注释
@@ -635,19 +640,19 @@ function makeProtocolJS(blocks: Block[]){
     // 生成结构体和协议结构体
     let makeStruct = (block: Block, isProtocol = false)=>{
         let struct = '';
-    
-        struct += tc.v() + 'protocol.' + (block.parent ? block.parent.name + '_' : '') + block.name + ' = function(_params_){' + crlf;
+        let blockName = (block.parent ? block.parent.name + '_' : '') + block.name;
+        struct += tc.v() + 'protocol.' + blockName + ' = function(_params_){' + crlf;
 
         tc.push();
 
+        let cmd = '';
         if (isProtocol){
-            let cmd = '';
             if (block.parent){
                 cmd = block.parent.name + '.' + block.name; 
             } else {
                 cmd = block.name;
             }
-            struct += tc.v() +'cmd = \'' + cmd + '\';' + crlf; 
+            struct += tc.v() +'this.cmd = protocol.' + blockName + '.cmd;' + crlf; 
         }
 
         let ctorParams = '';
@@ -666,6 +671,8 @@ function makeProtocolJS(blocks: Block[]){
         struct = struct.replace('_params_', ctorParams);
 
         outer += struct;
+
+        outer += tc.v() + 'protocol.' + blockName + '.cmd = "' + cmd + '";' + crlf;
     }
 
     for(let i = 0; i < blocks.length; i++){

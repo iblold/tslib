@@ -1,0 +1,54 @@
+{
+    "port": 10080, 		// 端口号
+    "root": "web",	// web根目录
+
+    "schedule": "",     // 驻留脚本
+    "https": false, 	//是否启用https
+    "httpsKey": null,
+    "httpsCert": null,
+    
+    "client_cache_first": false, 	// 优先使用浏览器缓存
+    "server_filecache": false,		// 开启服务器文件缓存
+    "cache_file_max": 5,		// 服务器文件缓存最大限制
+    
+    "dir_visit": false, 	// 是否启用目录浏览
+    
+    "upload_limit": 5, // 最大上传文件大小
+    
+    "compress": true, 		// 是否开启静态页面压缩传输
+    "comp_ignores":[		// 要排除在压缩传输之外的文件格式
+        ".png",
+        ".jpg",
+        ".apk",
+        ".app",
+        ".webp",
+        ".gif",
+        ".zip",
+        ".rar",
+        ".gz",
+        ".tar"
+    ],
+    
+    "default_page": [   // 目录下默认文件名
+        "index.html",
+        "index.htm",
+        "index.nsp",
+        "default.html",
+        "default.htm",
+        "default.nsp"
+    ],
+
+    "mime": {       		// 文件格式
+        "nsp": "text/html",
+        "html": "text/html",
+        "js": "text/javascript",
+        "css": "text/css",
+        "gif": "image/gif",
+        "jpg": "image/jpeg",
+        "png": "image/png",
+        "ico": "image/icon",
+        "txt": "text/plain",
+        "json": "application/json",
+        "default": "application/octet-stream"
+    }
+}

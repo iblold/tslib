@@ -18,6 +18,7 @@ export const ECode = {
 /**用户信息 type: struct */
 export class UserInfo{
 	static cmd = 'UserInfo';
+	cmd: string;
 	/**用户id */
 	uid: number;
 	/**名称 */
@@ -40,6 +41,7 @@ export class UserInfo{
 		this.level = level;
 		this.exp = exp;
 		this.items = items;
+		this.cmd = UserInfo.cmd
 
 	}
 }
@@ -47,9 +49,11 @@ export class UserInfo{
 /**聊天消息 type: protocol */
 export class Chat{
 	static cmd = 'Chat';
+	cmd: string;
 	msg: string;
 	constructor(msg: string = ""){
 		this.msg = msg;
+		this.cmd = Chat.cmd
 
 	}
 }
@@ -57,9 +61,11 @@ export class Chat{
 /**聊天消息同步 type: protocol */
 export class ChatSync{
 	static cmd = 'ChatSync';
+	cmd: string;
 	chatMsg: string[];
 	constructor(chatMsg: string[] = []){
 		this.chatMsg = chatMsg;
+		this.cmd = ChatSync.cmd
 
 	}
 }
@@ -68,6 +74,7 @@ export class ChatSync{
 /**登录消息request */
 export class Login_req{
 	static cmd = 'Login.req';
+	cmd: string;
 	/**账号 */
 	accout: string;
 	/**密码 */
@@ -75,16 +82,19 @@ export class Login_req{
 	constructor(accout: string = "", passwd: string = ""){
 		this.accout = accout;
 		this.passwd = passwd;
+		this.cmd = Login_req.cmd
 
 	}
 }
 /**登录消息response */
 export class Login_resp{
 	static cmd = 'Login.resp';
+	cmd: string;
 	/**返回值 */
 	code: number;
 	constructor(code: number = 0){
 		this.code = code;
+		this.cmd = Login_resp.cmd
 
 	}
 }
@@ -93,6 +103,7 @@ export class Login_resp{
 /**注册消息request */
 export class register_req{
 	static cmd = 'register.req';
+	cmd: string;
 	/**账号 */
 	accout: string;
 	/**密码 */
@@ -100,16 +111,19 @@ export class register_req{
 	constructor(accout: string = "", passwd: string = ""){
 		this.accout = accout;
 		this.passwd = passwd;
+		this.cmd = register_req.cmd
 
 	}
 }
 /**注册消息response */
 export class register_resp{
 	static cmd = 'register.resp';
+	cmd: string;
 	/**返回值, ECode */
 	code: number;
 	constructor(code: number = 0){
 		this.code = code;
+		this.cmd = register_resp.cmd
 
 	}
 }
@@ -117,9 +131,11 @@ export class register_resp{
 /**下发用户信息 type: protocol */
 export class UserinfoSync{
 	static cmd = 'UserinfoSync';
+	cmd: string;
 	user: UserInfo;
 	constructor(user: UserInfo = new UserInfo()){
 		this.user = user;
+		this.cmd = UserinfoSync.cmd
 
 	}
 }

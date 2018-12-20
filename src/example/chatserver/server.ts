@@ -1,7 +1,7 @@
 import { BaseFn } from '../../sys/basefunc';
-import {WsServer, WsClient, Client} from '../../sys/network';
+import {WsServer, Client} from '../../sys/network';
 import * as P from '../protocol';
-import { client } from 'websocket';
+import {Log} from '../../sys/log';
 
 /** 聊天服务器例子 */
 
@@ -17,6 +17,12 @@ function defFunctions(server: WsServer){
     // 处理登录消息
     server.defRpc(P.Login_req, (client: Client, info: P.Login_req)=>{
         logInfo(client.m_remoteAddr + ' login ok!' + info.accout + ':' + info.passwd);
+
+        // 通知其他用户有人进入
+        for(let k in users){
+            let c = users[k];
+            c.sendMsg(new P.ChatSync([id + ' join']));
+        }
 
         // 用户存进用户表
         users[id] = client;
@@ -40,15 +46,21 @@ function defFunctions(server: WsServer){
 
     // 处理聊天消息
     .defRpc(P.Chat, (client: Client, chat: P.Chat)=>{
-        // 直接把聊天内容同步给每个用户
-        for(let k in users){
-            let c = users[k];
-            c.sendMsg(new P.ChatSync([chat.msg]));
+        if (client.m_userData){
+            // 直接把聊天内容同步给每个用户
+            for(let k in users){
+                let c = users[k];
+                c.sendMsg(new P.ChatSync([client.m_userData + ': ' + chat.msg]));
+            }
         }
+
     })
 }
 
 function main(){
+    // 创建日志快速访问接口
+    Log.createSingleton();
+
     // 创建websocket服务器
     let server = new WsServer('games');
     
@@ -58,10 +70,16 @@ function main(){
     })
     .on('newconn',  (client: Client)=>{
         tempClients.push(client);
+        logWran('new connect: ' + client.m_remoteAddr);
     })
     .on('disconnect', (client: Client)=>{
+        logWran('disconnect: ' + client.m_remoteAddr);
         if (client.m_userData){
             delete users[client.m_userData];
+            for(let k in users){
+                let c = users[k];
+                c.sendMsg(new P.ChatSync(['user: ' + client.m_userData + ' leave']));
+            }
         } else {
             tempClients.splice(tempClients.indexOf(client), 1);
         }
@@ -78,8 +96,8 @@ function main(){
             let c: Client = tempClients[i];
 
             if (c.m_lastRecvTime == 0){
-                // 连接5秒收不到消息报直接踢掉
-                if (BaseFn.getTimeMS() - c.m_connectedTime > BaseFn._second(5)){
+                // 连接60秒收不到消息报直接踢掉
+                if (BaseFn.getTimeMS() - c.m_connectedTime > BaseFn._second(60)){
                     c.close();
                     tempClients.splice(tempClients.indexOf(c), 1);
                 }
