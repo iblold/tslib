@@ -1,0 +1,81 @@
+//! 测试用协议定义
+
+//！常量测试
+const int8 intv = 200;
+const string strv = "test";
+
+//! 返回值枚举定义
+enum ECode{
+    //! 操作成功
+    Ok = 0,
+    //! 数据库错误
+    DbaseFail,
+    //! 账号已存在
+    AccountRepeat,
+    //! 密码错误
+    MissPasswd,
+}
+
+//! 注册消息
+protocol register{
+    req{
+        //! 账号
+        string accout;
+        //! 密码
+        string passwd;
+    }
+
+    resp{
+        //! 返回值, ECode
+        int16 code;
+    }
+}
+
+//! 用户信息
+struct UserInfo{
+    //! 用户id
+    int32 uid;
+    //! 名称
+    string name;
+    //! 头像
+    string icon;
+    //! 金币
+    int32 money;
+    //! 级别
+    int16 level;
+    //! 经验值
+    int32 exp;
+    //! 道具列表
+    int32 items[];
+}
+
+//! 登录消息
+protocol Login{
+    req{
+        //! 账号
+        string accout;
+        //! 密码
+        string passwd;
+    }
+
+    resp{
+        //! 返回值
+        int16 code;
+    }
+}
+
+//! 下发用户信息
+protocol UserinfoSync{
+    UserInfo user;
+}
+
+//! 聊天消息同步
+protocol ChatSync{
+    string chatMsg[];
+}
+
+//! 聊天消息
+protocol Chat{
+    string msg;
+}
+

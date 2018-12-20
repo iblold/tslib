@@ -124,11 +124,11 @@
 
      /**
       * 定义远程调用响应函数
-      * @param msg 消息类型或者带有cmd字段的对象
+      * @param packetType 消息类型或者带有cmd字段的对象
       * @param cb 处理此类型消息的回掉函数
       */
-     defRpc(msg: any, cb: (client: Client, param: any)=>any){
-        this.router(msg, (client: Client, param: any)=>{
+     defRpc(packetType: any, cb: (client: Client, param: any)=>any){
+        this.router(packetType, (client: Client, param: any)=>{
             let ret = cb(client, param);
             if (ret != null && param.rpcid != null){
                 ret.rpcid = param.rpcid;
@@ -167,6 +167,8 @@
      m_lastRecvTime: number;
      /**远端地址 */
      m_remoteAddr: string;
+     /**用户数据 */
+     m_userData: any;
 
      constructor(type: NetType, server: Server|null = null){
         super(type);
@@ -554,8 +556,6 @@
      }
  
      onData(buffer: Buffer){
-        this.m_lastRecvTime = BaseFn.getTimeMS();
-
         // 数据写入接收缓冲
         buffer.copy(this.m_recvBuffer, this.m_recvUsed);
         this.m_recvUsed += buffer.length;
@@ -565,7 +565,7 @@
             this.onError(new Error('recive error packet'));
             this.close();
         } else {
-
+            this.m_lastRecvTime = BaseFn.getTimeMS();
             // 当前包大小
             let cursize = this.m_recvBuffer.readUInt32LE(2);
             // 收到半包，继续等待
@@ -697,6 +697,7 @@
         this.m_socket = socket;
         this.m_url = '';
         if (socket){
+            this.m_connectedTime = BaseFn.getTimeMS();
             this.bindFuncs(socket);
             this.m_lineState = LineState.OnLine;
         }
@@ -748,7 +749,7 @@
     }
     
     onData(msg: websocket.IMessage){
-        this.m_lastRecvTime = BaseFn.getTimeMS();
+        
         if (msg.type === 'binary') {
             let buff = msg.binaryData;
             if (buff){
@@ -757,7 +758,7 @@
                     this.close();
                     return;
                 }
-
+                this.m_lastRecvTime = BaseFn.getTimeMS();
                 let unzSize = buff.readUInt32LE(6);
                 if (unzSize > 0) {
                     zlib.inflate(buff.slice(10), (err, buff) => {

@@ -10,7 +10,7 @@ const tab = '\t';
 const typeMap = {
     /**原生类型 */
     native: ['int8', 'int16', 'int32', 'uint8', 'uint16', 'uint32', 'float', 'double', 'string', 'bool'],
-    default: ['0', '0', '0', '0', '0', '0', '0', '0', '\'\'', 'false'],
+    default: ['0', '0', '0', '0', '0', '0', '0', '0', '""', 'false'],
 
     /**js/ts类型 */
     js: ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number', 'string', 'boolean'],
@@ -30,9 +30,14 @@ const typeMap = {
 
     getDefault: function(type: string){
         return this.transType(type, this.default) || ('new ' + type + '()');
+    },
+
+    getCsType: function(type: string){
+        return this.transType(type, this.cs) || type;
     }
 }
 
+/**运行参数 */
 class Config{
     inputFile: string;
     outputFile: string;
@@ -46,6 +51,7 @@ class Config{
     }
 }
 
+/**结构体成员信息 */
 class Member{
     rem: string;
     name: string;
@@ -64,17 +70,20 @@ class Member{
     }
 }
 
+/**结构体信息 */
 class Block extends Member{
     members: Member[]; 
     request: Block|null;
     reponse: Block|null;
     parent: Block|null;
+    constType: string;
     constructor(name = '', type = '', line = -1, rem = ''){
         super(rem, name, type, line);
         this.members = [];
         this.request = null;
         this.reponse = null;
         this.parent = null;
+        this.constType = '';
     }
 
     typeCost(){
@@ -93,6 +102,7 @@ class Block extends Member{
     }
 }
 
+/**缩进适配 */
 class TabCache{
     m_tabs: string;
     constructor(){
@@ -111,7 +121,7 @@ class TabCache{
         return this.m_tabs;
     }
 }
-
+/**解析运行参数 */
 function parseArgs(){
     let params = process.argv;
     let config = new Config();
@@ -248,6 +258,7 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
                             if (constInfo != null && constInfo.length == 4) {
                                 let constBlock = new Block(constInfo[2], 'const', i, rem);
                                 constBlock.value = constInfo[3];
+                                constBlock.constType = constInfo[1];
                                 blocks.push(constBlock);
                             } else {
                                 console.log('解析常量定义错误: ' + line + ' 行 ' + i);
@@ -378,7 +389,12 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
 
     // 按const, enum, struct, protocol排序
     blocks.sort((a, b) => {
-        return a.typeCost() - b.typeCost();
+        let n = a.typeCost() - b.typeCost();
+        if (n == 0){
+            return a.name.localeCompare(b.name);
+        } else {
+            return n;
+        }
     });
 
     (<any>blocks).rem = protocolRem;
@@ -389,7 +405,7 @@ function main(){
     let config = parseArgs();
 
     if (config.inputFile == '' || config.outputFile == ''){
-        console.log('param wrong.\r\nuse node prototool.js -i xxx -o xxx');
+        console.log('参数错误.\r\n可用参数有-i 输入文件， -o 输出文件 -l [cs|js|ts] 协议语言 -dts 同时输出.d.ts文件\r\n例如 node prototool.js -i xxx -o xxx -l cs');
         return;
     }
 
@@ -398,7 +414,7 @@ function main(){
         let protocol: string|null = null;
         switch(config.type){
             case 'cs':
-                //protocol = makeProtocolCS(blocks);
+                protocol = makeProtocolCS(blocks);
             break;
 
             case 'ts':
@@ -406,7 +422,7 @@ function main(){
             break;
 
             case 'js':
-                //protocol = makeProtocolJS(blocks);
+                protocol = makeProtocolJS(blocks);
             break;
         }
 
@@ -419,7 +435,7 @@ function main(){
 
         if (protocol){
             fs.writeFileSync(config.outputFile, protocol);
-            console.log('build protocol ok!');
+            console.log('生成协议成功!');
         }
     }
 }
@@ -428,27 +444,25 @@ function main(){
 function makeProtocolTS(blocks: Block[]): string|null{
     // 缩进控制
     let tc = new TabCache();
-    let outer = tc.v() + (<any>blocks).rem + crlf;
+    let outer = tc.v() + '// ' + (<any>blocks).rem + crlf;
 
     // 输出成员的注释
-    let printRem = (block: Member)=>{
+    let printRem = (block: Member, ext = '')=>{
         if (block.rem && block.rem != ''){
-            outer += tc.v() + '/**' + block.rem + ' */' + crlf;
+            outer += tc.v() + '/**' + block.rem + ext + ' */' + crlf;
         }
     }
     
     // 生成结构体和协议结构体
-    let makeStruct = (block: Block, isProtocol = false, isInside = false)=>{
-        if (!isInside){
-            outer += tc.v() + 'export class ' + block.name + '{' + crlf;
-        } else {
-            outer += tc.v() + block.name + ': class{' + crlf;
-        }
+    let makeStruct = (block: Block, isProtocol = false)=>{
+        
+        outer += tc.v() + 'export class ' + (block.parent ? block.parent.name + '_' : '') + block.name + '{' + crlf;
+
         tc.push();
 
         if (isProtocol){
             let cmd = '';
-            if (isInside && block.parent){
+            if (block.parent){
                 cmd = block.parent.name + '.' + block.name; 
             } else {
                 cmd = block.name;
@@ -468,7 +482,8 @@ function makeProtocolTS(blocks: Block[]): string|null{
             ctorSubject += tc.v() + 'this.' + member.name + ' = ' + member.name + ';' + crlf;
             tc.pop();
 
-            ctorParams += member.name + ' = ' + (member.isArray ? '[]' : typeMap.getDefault(member.type)) 
+            ctorParams += member.name + ': ' + typeMap.getJsType(member.type) + (member.isArray ? '[]':'')
+                + ' = ' + (member.isArray ? '[]' : typeMap.getDefault(member.type)) 
                 + (j < block.members.length - 1 ? ', ' : '');
         }
 
@@ -476,13 +491,13 @@ function makeProtocolTS(blocks: Block[]): string|null{
         outer += tc.v() + '}' + crlf;
 
         tc.pop();
-        outer += tc.v() + '}' + (isInside ? ',' : '') + crlf;
+        outer += tc.v() + '}' + crlf;
     }
 
     for(let i = 0; i < blocks.length; i++){
         let block = blocks[i];
         
-        printRem(block);
+        printRem(block, ' type: ' + block.type);
         if (block.type == 'const'){
 
             outer += tc.v() + 'export const ' + block.name + ' = ' + block.value + ';' + crlf;
@@ -501,22 +516,12 @@ function makeProtocolTS(blocks: Block[]): string|null{
             tc.pop();
             outer += tc.v() + '}' + crlf;
 
-        } else if (block.type == 'struct'){
-            makeStruct(block);
-
-        } else if (block.type == 'protocol'){
+        } else if (block.type == 'struct' || block.type == 'protocol'){
             if (block.reponse && block.request){
-
-                outer += tc.v() + 'export const ' + block.name + ' = {' + crlf;
-                tc.push();
-                outer += tc.v() + 'cmd: \'' + block.name + '.req\',' + crlf;
-                
-                makeStruct(block.request, true, true);
-                makeStruct(block.reponse, true, true);
-
-                tc.pop();
-                outer += tc.v() + '}' + crlf;
-
+                printRem(block, 'request');
+                makeStruct(block.request, true);
+                printRem(block, 'response');
+                makeStruct(block.reponse, true);
             } else {
                 makeStruct(block, true);
             }
@@ -531,25 +536,27 @@ function makeProtocolTS(blocks: Block[]): string|null{
     return outer;
 }
 
+/**生成d.ts定义 */
 function makeDTS(blocks: Block[]){
     let tc = new TabCache();
-    let outer = tc.v() + (<any>blocks).rem + crlf + 'declare namespace protocol{' + crlf;
+    let outer = tc.v() + '// ' + (<any>blocks).rem + crlf + 'declare namespace protocol{' + crlf;
     tc.push();
 
-    let printRem = (block: Member)=>{
+    let printRem = (block: Member, ext = '')=>{
         if (block.rem && block.rem != ''){
-            outer += tc.v() + '/**' + block.rem + ' */' + crlf;
+            outer += tc.v() + '/**' + block.rem + ext + ' */' + crlf;
         }
     }
 
-    let makeStruct = (block: Block, isProtocol = false, isInside = false)=>{
-        outer += tc.v() + 'class ' + block.name + '{' + crlf;
+    let makeStruct = (block: Block, isProtocol = false)=>{
+        outer += tc.v() + 'class ' + (block.parent ? block.parent.name + '_' : '') + block.name + '{' + crlf;
         tc.push();
 
         if (isProtocol){
             outer += tc.v() + 'static cmd: string;' + crlf; 
         }
 
+        let ctorRem = '/**' + crlf;
         let ctor = 'constructor(_params_);';
         let params = '';
         for(let j = 0; j < block.members.length; j++){
@@ -558,8 +565,13 @@ function makeDTS(blocks: Block[]){
             outer += tc.v() + member.name + ': ' + typeMap.getJsType(member.type) + (member.isArray ? '[]':'') + ';' + crlf;
             params += member.name + ': ' + typeMap.getJsType(member.type) 
                 + (member.isArray ? '[]':'') + (j < block.members.length - 1 ? ', ': '');
+            
+            ctorRem += tc.v() + '* @param ' + member.name + ' ' + member.rem + crlf;
         }
 
+        ctorRem += tc.v() + '*/';
+
+        outer += tc.v() + ctorRem + crlf;
         outer += tc.v() + ctor.replace('_params_', params) + crlf;
         tc.pop();
         outer += tc.v() + '}' + crlf;
@@ -568,7 +580,7 @@ function makeDTS(blocks: Block[]){
     for(let i = 0; i < blocks.length; i++){
         let block = blocks[i];
         
-        printRem(block);
+        printRem(block, ' type: ' + block.type);
         if (block.type == 'const'){
 
             outer += tc.v() + 'const ' + block.name + ' = ' + block.value + ';' + crlf;
@@ -587,26 +599,16 @@ function makeDTS(blocks: Block[]){
             tc.pop();
             outer += tc.v() + '}' + crlf;
 
-        } else if (block.type == 'struct'){
-            makeStruct(block);
-
-        } else if (block.type == 'protocol'){
+        } else if (block.type == 'struct' || block.type == 'protocol'){
             if (block.request && block.reponse){
-                outer += tc.v() + 'namespace ' + block.name + '{' + crlf;
-                tc.push();
-
-                outer += tc.v() + 'const cmd = \'' + block.name + '.req\';' + crlf;
-                makeStruct(block.request, true, true);
-                makeStruct(block.reponse, true, true);
-                tc.pop();
-
-                outer += tc.v() + '}' + crlf;
+                printRem(block, 'request');
+                makeStruct(block.request, true);
+                printRem(block, 'response');
+                makeStruct(block.reponse, true);
             }else {
                 makeStruct(block, true);
             }
-
-        }
-
+        } 
         outer += crlf;
     }
 
@@ -616,64 +618,60 @@ function makeDTS(blocks: Block[]){
     return outer;
 }
 
+/**生成js协议 */
 function makeProtocolJS(blocks: Block[]){
     let tc = new TabCache();
-    let outer = tc.v() + (<any>blocks).rem + crlf + 'globa.protocol = globa.protocol || {};' + crlf;
+    let outer = '"use strict";' + crlf 
+    outer += tc.v() + '// ' + (<any>blocks).rem + crlf + 'global.protocol = global.protocol || {};' + crlf;
     tc.push();
 
     // 输出成员的注释
-    let printRem = (block: Member)=>{
+    let printRem = (block: Member, ext = '')=>{
         if (block.rem && block.rem != ''){
-            outer += tc.v() + '/**' + block.rem + ' */' + crlf;
+            outer += tc.v() + '/**' + block.rem + ext + ' */' + crlf;
         }
     }
     
     // 生成结构体和协议结构体
-    let makeStruct = (block: Block, isProtocol = false, isInside = false)=>{
-        if (!isInside){
-            outer += tc.v() + 'global class ' + block.name + '{' + crlf;
-        } else {
-            outer += tc.v() + block.name + ': class{' + crlf;
-        }
+    let makeStruct = (block: Block, isProtocol = false)=>{
+        let struct = '';
+    
+        struct += tc.v() + 'protocol.' + (block.parent ? block.parent.name + '_' : '') + block.name + ' = function(_params_){' + crlf;
+
         tc.push();
 
         if (isProtocol){
             let cmd = '';
-            if (isInside && block.parent){
+            if (block.parent){
                 cmd = block.parent.name + '.' + block.name; 
             } else {
                 cmd = block.name;
             }
-            outer += tc.v() + 'static cmd = \'' + cmd + '\';' + crlf; 
+            struct += tc.v() +'cmd = \'' + cmd + '\';' + crlf; 
         }
 
-        let ctorSubject = 'constructor(_params_){' + crlf;
         let ctorParams = '';
 
         for(let j = 0; j < block.members.length; j++){
             let member = block.members[j];
             printRem(member);
-            outer += tc.v() + member.name + ': ' + typeMap.getJsType(member.type) + (member.isArray ? '[]':'') + ';' + crlf;
-
-            tc.push();
-            ctorSubject += tc.v() + 'this.' + member.name + ' = ' + member.name + ';' + crlf;
-            tc.pop();
+            struct += tc.v() + 'this.' + member.name + ' = ' + member.name + ';' + crlf;;
 
             ctorParams += member.name + ' = ' + (member.isArray ? '[]' : typeMap.getDefault(member.type)) 
                 + (j < block.members.length - 1 ? ', ' : '');
         }
 
-        outer += tc.v() + ctorSubject.replace('_params_', ctorParams) + crlf;
-        outer += tc.v() + '}' + crlf;
-
         tc.pop();
-        outer += tc.v() + '}' + (isInside ? ',' : '') + crlf;
+        struct += tc.v() + '}' + crlf;
+        struct = struct.replace('_params_', ctorParams);
+
+        outer += struct;
     }
 
     for(let i = 0; i < blocks.length; i++){
         let block = blocks[i];
         
-        printRem(block);
+        printRem(block, ' type: ' + block.type);
         if (block.type == 'const'){
 
             outer += tc.v() + 'protocol.' + block.name + ' = ' + block.value + ';' + crlf;
@@ -692,21 +690,12 @@ function makeProtocolJS(blocks: Block[]){
             tc.pop();
             outer += tc.v() + '}' + crlf;
 
-        } else if (block.type == 'struct'){
-            makeStruct(block);
-
-        } else if (block.type == 'protocol'){
+        } else if (block.type == 'protocol' || block.type == 'struct'){
             if (block.reponse && block.request){
-
-                outer += tc.v() + 'export const ' + block.name + ' = {' + crlf;
-                tc.push();
-                outer += tc.v() + 'cmd: \'' + block.name + '.req\',' + crlf;
-                
-                makeStruct(block.request, true, true);
-                makeStruct(block.reponse, true, true);
-
-                tc.pop();
-                outer += tc.v() + '}' + crlf;
+                printRem(block, 'request');
+                makeStruct(block.request, true);
+                printRem(block, 'response');
+                makeStruct(block.reponse, true);
 
             } else {
                 makeStruct(block, true);
@@ -717,13 +706,119 @@ function makeProtocolJS(blocks: Block[]){
         outer += crlf;
     }
     
-        
-
     tc.pop();
-    outer += '}';
 
     outer += crlf;
     return outer; 
+}
+
+/**生成c#协议 */
+function makeProtocolCS(blocks: Block[]){
+    // 缩进控制
+    let tc = new TabCache();
+    let outer = tc.v() + '// ' + (<any>blocks).rem + crlf + 'using System;' + crlf;
+    outer += tc.v() + 'namespace protocol{' + crlf;
+    tc.push();
+
+    // 输出成员的注释
+    let printRem = (block: Member, ext = '')=>{
+        if (block.rem && block.rem != ''){
+            outer += tc.v() + '/// ' + block.rem + ext + crlf;
+        }
+    }
+    
+    // 生成结构体和协议结构体
+    let makeStruct = (block: Block, isProtocol = false)=>{
+        let blockName = (block.parent ? block.parent.name + '_' : '') + block.name;
+
+        outer += tc.v() + 'public class ' + blockName + '{' + crlf;
+        tc.push();
+
+        if (isProtocol){
+            let cmd = '';
+            if (block.parent){
+                cmd = block.parent.name + '.' + block.name; 
+            } else {
+                cmd = block.name;
+            }
+            outer += tc.v() + 'public const string cmd = "' + cmd + '";' + crlf; 
+        }
+
+        let ctorSubject =  'public ' + blockName + '(_params_){' + crlf;
+        let ctorParams = '';
+
+        for(let j = 0; j < block.members.length; j++){
+            let member = block.members[j];
+            printRem(member);
+
+            let mtype = typeMap.getCsType(member.type);
+            if (member.isArray) mtype += '[]';
+
+            outer += tc.v() + 'public ' + mtype + ' ' + member.name + ';' + crlf;
+
+            tc.push();
+            ctorSubject += tc.v() + 'this.' + member.name + ' = ' + member.name + ';' + crlf;
+            tc.pop();
+
+            let mvalue = typeMap.getDefault(member.type);
+            if (member.isArray || mvalue.indexOf('(') > -1){
+                mvalue = 'null';
+            }
+            ctorParams += mtype + ' ' + member.name + ' = ' + mvalue
+                + (j < block.members.length - 1 ? ', ' : '');
+        }
+
+        outer += tc.v() + ctorSubject.replace('_params_', ctorParams) + crlf;
+        outer += tc.v() + '}' + crlf;
+
+        tc.pop();
+        outer += tc.v() + '}' + crlf;
+    }
+
+    for(let i = 0; i < blocks.length; i++){
+        let block = blocks[i];
+        
+        printRem(block, ' type: ' + block.type);
+        if (block.type == 'const'){
+
+            outer += tc.v() + 'public class ' + block.name + '{ public const '
+                + typeMap.getCsType(block.constType) + ' v = ' + block.value + '; }' + crlf;
+
+        } else if (block.type == 'enum'){
+
+            outer += tc.v() + 'public enum ' + block.name + '{' + crlf;
+            tc.push();
+
+            for(let j = 0; j < block.members.length; j++){
+                let member = block.members[j];
+                printRem(member);
+                outer += tc.v() + member.name + ' = ' + member.value + ',' + crlf;
+            }
+
+            tc.pop();
+            outer += tc.v() + '}' + crlf;
+
+        } else if (block.type == 'protocol' || block.type == 'struct'){
+            if (block.reponse && block.request){
+                printRem(block, 'request');
+                makeStruct(block.request, true);
+                printRem(block, 'response');
+                makeStruct(block.reponse, true);
+
+            } else {
+                makeStruct(block, true);
+            }
+
+        }
+
+        outer += crlf;
+    }
+
+    tc.pop();
+    
+    outer += tc.v() + '}' + crlf;
+
+    return outer;
 }
 
 main();

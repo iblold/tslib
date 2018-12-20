@@ -6,6 +6,7 @@
 
 //! 测试内容
 const int8 ctest = 0;
+const string ctest1 = "sasdasd";
 
 //! 枚举错误信息定义
 enum ECodes{

@@ -14,7 +14,7 @@
             ],
             "preLaunchTask": "tsc",
             "args": [
-                "-i", "a.txt", "-o", "a.ts", "-l", "ts", "-dts"
+                "-i", "./src/example/protocol.txt", "-o", "a.cs", "-l", "cs", "-dts"
             ]
         }
     ]
