@@ -1,5 +1,5 @@
 import { BaseFn } from '../../sys/basefunc';
-import {WsServer, Client} from '../../sys/network';
+import {WsServer, Client, Server, TcpServer} from '../../sys/network';
 import * as P from '../protocol';
 import {Log} from '../../sys/log';
 
@@ -13,7 +13,7 @@ let tempClients: any[] = [];
 let users: {[key: number]: Client} = {};
 
 /**定义消息响应函数 */
-function defFunctions(server: WsServer){
+function defFunctions(server: Server){
     // 处理登录消息
     server.defRpc(P.Login_req, (client: Client, info: P.Login_req)=>{
         logInfo(client.m_remoteAddr + ' login ok!' + info.accout + ':' + info.passwd);
@@ -62,7 +62,7 @@ function main(){
     Log.createSingleton();
 
     // 创建websocket服务器
-    let server = new WsServer('games');
+    let server = new TcpServer();//WsServer('games');
     
     // 注册服务器系统事件响应函数
     server.on('error', (client: Client, err: Error)=>{
@@ -84,8 +84,8 @@ function main(){
             tempClients.splice(tempClients.indexOf(client), 1);
         }
     })
-    .on('start', ()=>{
-        logInfo('server start success!');
+    .on('start', (port: number)=>{
+        logInfo('server start success! ::' + port);
     });
 
     defFunctions(server);
@@ -110,6 +110,11 @@ function main(){
 
     // 启动服务器
     server.start(10086);
+
+    let wss = new WsServer('games');
+    server.hold(wss);
+    wss.start(6666);
+
 }
 
 main();

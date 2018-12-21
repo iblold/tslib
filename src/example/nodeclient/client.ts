@@ -1,13 +1,13 @@
 import {BaseFn} from '../../sys/basefunc';
 import {Log} from '../../sys/log';
-import {WsClient} from '../../sys/network';
+import {WsClient, TcpClient} from '../../sys/network';
 import * as P from '../protocol';
 
 /**命令列表 */
 let funcs: any = {};
 
 /**客户端 */
-let client: WsClient = new WsClient();
+let client: TcpClient = new TcpClient();
 
 /**解析命令参数 */
 function parseParam(str: string){
@@ -69,7 +69,7 @@ function connect(url: string){
     client.on('connected', ()=>{
         logDeb('connect success!');
     });
-    client.connect(url, 0);
+    client.connect(url, 10086);
 }
 
 /**登录 */
