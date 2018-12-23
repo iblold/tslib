@@ -25,7 +25,7 @@
  /** NetBase类 */
  class NetBase{
      m_type: NetType;
-     private m_callbacks: Map<string, any>; 
+     protected m_callbacks: Map<string, any>; 
 
      constructor(type: NetType){
          this.m_type = type;
@@ -63,6 +63,7 @@
      /** 客户端列表 */
      m_clients: any;
      m_router: any;
+     m_controler: Server|null;
 
      /**
       * 构造函数
@@ -73,6 +74,7 @@
          this.m_type = type;
          this.m_clients = [];
          this.m_router = {};
+         this.m_controler = null;
      }
 
      /**
@@ -94,8 +96,12 @@
       * @param msg 接收到的消息
       */
      dispatcher(client: any, msg: any){
-        let cb = this.m_router[msg.cmd||''];
-        if(cb) cb(client, msg);
+         if (this.m_controler){
+             this.m_controler.dispatcher(client, msg);
+         } else {
+            let cb = this.m_router[msg.cmd||''];
+            if(cb) cb(client, msg);
+         } 
      }
 
      /**
@@ -137,16 +143,30 @@
         });
         return this;
      }
+
+     /**
+      * 让otherServer把事件转交给本服务器处理
+      * @param otherServer 其他Server对象
+      */
+     hold(otherServer: Server){
+         if(otherServer != this){
+            otherServer.m_controler = this;
+            otherServer.m_callbacks = this.m_callbacks;
+         }
+         return this;
+     }
  }
 
  /** 在线状态 */
  export class LineState{
-     /** 未知状态 */
+     /**未知状态 */
      static None = 0;
-     /** 离线 */
-     static OnLine = 1;
-     /** 在线 */
-     static OffLine = 2;
+     /**连接中 */
+     static Connecting= 1;
+     /**离线 */
+     static OnLine = 2;
+     /**在线 */
+     static OffLine = 3;
  }
 
  /** 客户端基类 */
@@ -491,7 +511,7 @@
          });
 
          this.m_server.listen(port, ()=>{
-            this.on('start');
+            this.on('start', port);
          });
      }
 
@@ -500,9 +520,9 @@
       * @param socket 连入的链接
       */
      onIncomming(socket: tcpnet.Socket){
-        let accept = this.on('duan', socket);
+        let accept = this.on('incomming', socket);
         if (accept == true || accept == null){
-            let conn = new TcpClient(socket);
+            let conn = new TcpClient(socket, this);
             this.m_clients.push(conn);
             this.on('newconn', conn);
             return true;
@@ -555,62 +575,75 @@
             this.m_socket.end();
      }
  
-     onData(buffer: Buffer){
-        // 数据写入接收缓冲
-        buffer.copy(this.m_recvBuffer, this.m_recvUsed);
-        this.m_recvUsed += buffer.length;
-
-        // 收到错误消息包，断开此链接
-        if (!this.checkMsg(this.m_recvBuffer)) {
-            this.onError(new Error('recive error packet'));
-            this.close();
+     /**处理完整的消息包 */
+     private preDispatcher(buffer: Buffer){
+        this.m_lastRecvTime = BaseFn.getTimeMS();
+        let unzSize = buffer.readUInt32LE(6);
+        if (unzSize > 0) {
+            // 不知道zlib内部是否拷贝了这块缓存, 如果没有可能会出错, 如果发现压缩包收包乱了可以尝试先拷贝buffer再解压
+            zlib.inflate(buffer.slice(10), (err, buff) => {
+                if (!err) {
+                    this.dispatcher(buff);
+                } else {
+                    this.onError(err);
+                }
+            });
         } else {
-            this.m_lastRecvTime = BaseFn.getTimeMS();
-            // 当前包大小
-            let cursize = this.m_recvBuffer.readUInt32LE(2);
-            // 收到半包，继续等待
-            if (cursize > this.m_recvUsed) return;
+            this.dispatcher(buffer.slice(10));
+        }
+     }
 
-            let offset = 0;
-            while (offset < this.m_recvUsed) {
-                // 取出一个完整包
-                let msg = this.m_recvBuffer.slice(offset, offset + cursize);
-                let unzSize = msg.readUInt32LE(6);
-                if (unzSize > 0) {
-                    zlib.inflate(msg.slice(10), (err, buff) => {
-                        if (!err) {
-                            this.dispatcher(buff);
-                        } else {
-                            this.onError(err);
-                        }
-                    });
-                } else {
-                    this.dispatcher(msg.slice(10));
+     onData(buffer: Buffer){
+
+        let bufferBegin = 0;
+        let packetSize = 0;
+        // 有不完整的包存在, 尝试填满
+        if (this.m_recvUsed > 0){
+            // 完整包大小
+            packetSize = this.m_recvBuffer.readUInt32LE(2);
+            // 剩下的大小和收到的数据比较
+            let remain = packetSize - this.m_recvUsed;
+            if (buffer.length >= remain){
+                buffer.copy(this.m_recvBuffer, this.m_recvUsed, 0, remain);
+                //分发recvbuff, 处理buffer剩下的
+                this.preDispatcher(this.m_recvBuffer);
+                this.m_recvUsed = 0;
+                // buff剩下的内容
+                let bufferRemain = buffer.length - remain;
+                if (bufferRemain > 0){
+                    bufferBegin = remain;
                 }
+            } else {
+                buffer.copy(this.m_recvBuffer, this.m_recvUsed);
+                this.m_recvUsed += buffer.length;
+            }
+        }
 
-                offset += cursize;
-                if (offset >= this.m_recvUsed) {
-                    this.m_recvUsed = 0;
-                    return;
-                } else {
-                    // 不够读出下一个包体大小
-                    if (offset + 6 > this.m_recvUsed) {
-                        let size = this.m_recvUsed - offset;
-                        BaseFn.moveBufferSelf(this.m_recvBuffer, { begin: offset, end: this.m_recvUsed }, { begin: 0, end: size });
-                        this.m_recvUsed = size;
-                    } else {
-                        cursize = this.m_recvBuffer.readUInt32LE(offset + 2);
+        // 处理buffer中所有的包
+        while(bufferBegin < buffer.length){
+            let recvBuff = buffer.slice(bufferBegin);
+            // 接收到不认识的包, 断开连接
+            if (!this.checkMsg(recvBuff)){
+                this.onError(new Error('recive error packet'));
+                this.close();
+                return;
+            }
 
-                        // 只剩下半包可读
-                        if (offset + cursize > this.m_recvUsed) {
-                            let size = this.m_recvUsed - offset;
-                            BaseFn.moveBufferSelf(this.m_recvBuffer, { begin: offset, end: this.m_recvUsed }, { begin: 0, end: size });
-                            this.m_recvUsed = size;
-                            return;
-                        }
+            // 尝试读出包体大小
+            let packetSize = 0;
+            if (recvBuff.length >= 6){
+                packetSize = recvBuff.readUInt32LE(2);
+            }
 
-                    }
-                }
+            if (packetSize > 0 && packetSize <= recvBuff.length){
+                // buffer中还有完整包
+                this.preDispatcher(recvBuff.slice(0, packetSize));
+                bufferBegin += packetSize;
+            } else {
+                // 剩下的半包放入缓存, 等待
+                recvBuff.copy(this.m_recvBuffer, 0);
+                this.m_recvUsed = recvBuff.length;
+                bufferBegin += recvBuff.length
             }
         }
      }
@@ -647,7 +680,7 @@
 
         //在指定的端口监听服务
         this.m_httpServer.listen(port, () => {
-            this.on('start');
+            this.on('start', port);
         });
 
         try {
