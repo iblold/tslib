@@ -45,4 +45,48 @@ class WsClient{
         this.m_connectTimeout = connectTimeout || 5000;
         this.m_reconnInterval = reconnInterval || -1;
     }
+
+    connect(url: string, cb: ()=>void){
+
+    }
+
+    reConnect(){
+
+    }
+
+    close(){
+
+    }
+
+    onError(){
+
+    }
+
+    onData(msg: any){
+
+    }
+
+    onEnd(){
+
+    }
+
+    breath(){
+
+    }
+
+    rpc(params: any, cb: (msg: any)=>void){
+
+    }
+
+    send(msg: any, end: boolean){
+
+    }
+
+    roter(packetType: any, cb: (msg: any)=>void){
+
+    }
+
+    on(event: string, ...params: any){
+
+    }
 }
