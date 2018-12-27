@@ -113,7 +113,7 @@ function main(){
 
     let wss = new WsServer('games');
     server.hold(wss);
-    wss.start(6666);
+    wss.start(10010);
 
 }
 
