@@ -1,6 +1,6 @@
 
  /** 在线状态 */
- class LineState{
+ export class LineState{
     /**未知状态 */
     static None = 0;
     /**连接中 */
@@ -11,9 +11,9 @@
     static OffLine = 3;
 }
 
-type CbMap =  {[key: string]: (msg:any)=>any};
+export type CbMap =  {[key: string]: (msg:any)=>any};
 
-class WsClient{
+export class WsClient{
     m_ws: any;
     m_url: string;
     m_rpcid: number;
@@ -260,17 +260,16 @@ class WsClient{
     * connected, 连接完成, 对应connect()
     * @param params 如果是函数则设置，否则调用
     */
-    on(event: string, ...params: any[]){
+    on(event: string, ...params: any[]): WsClient{
         if (params.length == 1 && typeof params[0] == 'function'){
             this.m_callbacks[event] = params[0];
-            return this;
         } else {
             let cb = this.m_callbacks[name];
             if (cb){
-                return cb.apply(null, <any>params);
+                cb.apply(null, <any>params);
             }
         }
-        return null;
+        return this;
     }
 }
 
