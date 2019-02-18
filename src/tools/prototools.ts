@@ -161,21 +161,21 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
 
     // 分析过程状态定义
     /**查找定义名 */
-    let S_FINDDEF = 0;
+    let S_FindDef = 0;
     /**查找定义开始位置 */      
-    let S_FINDBODYST = 1;   // 
+    let S_FindBodyStart = 1;   // 
     /**查找定义体 */
-    let S_FINDBODY = 3;     // 
+    let S_FindBody = 3;     // 
     /**查找内部定义开始位置 */
-    let S_FINDINNST = 4;    // 
+    let S_FindInnerStart = 4;    // 
     /**查找内部定义体 */
-    let S_FINDINNBODY = 6;  // 
+    let S_FindInnerBody = 6;  // 
     /**查找枚举定义开始位置 */
-    let S_FINDENUMST = 7;   // 
+    let S_FindEnumStart = 7;   // 
     /**查找枚举定义体 */
-    let S_FINDENUMBODY = 8;     // 
+    let S_FindEnumBody = 8;     // 
 
-    let state = S_FINDDEF;
+    let state = S_FindDef;
 
     // 全部定义内容
     let blocks: Block[] = [];
@@ -226,7 +226,7 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
                 // 删除行注释
                 line = line.replace(/\/\/[\s\S\w\W]+/g, '');
                 if (line.length > 0) {
-                    if (state == S_FINDDEF) {
+                    if (state == S_FindDef) {
                         // 查找结构和协议定义名称
                         let blockInfo = line.match(/\s*(struct|protocol|enum)\s*([\w]+)\s*/);
                         if (blockInfo != null && blockInfo.length == 3) {
@@ -239,15 +239,15 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
                             }
 
                             if (line.indexOf('{') > 0) {
-                                state = S_FINDBODY;
+                                state = S_FindBody;
                                 if (curBlock.type == 'enum') {
-                                    state = S_FINDENUMBODY;
+                                    state = S_FindEnumBody;
                                 }
                                 lastline = i;
                             } else {
-                                state = S_FINDBODYST;
+                                state = S_FindBodyStart;
                                 if (curBlock.type == 'enum') {
-                                    state = S_FINDENUMST;
+                                    state = S_FindEnumStart;
                                 }
                                 lastline = i;
                             }
@@ -265,12 +265,12 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
                                 return;
                             }
                         }
-                    } else if (state == S_FINDBODYST) {
+                    } else if (state == S_FindBodyStart) {
                         if (line.indexOf('{') >= 0) {
-                            state = S_FINDBODY;
+                            state = S_FindBody;
                             lastline = i;
                         }
-                    } else if (state == S_FINDBODY) {
+                    } else if (state == S_FindBody) {
                         // 查找内部定义
                         let insideInfo = line.match(/(req|resp)\s*/);
                         if (insideInfo && insideInfo.length == 2) {
@@ -282,13 +282,16 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
                             } else if (curInsideBlock.name == 'resp') {
                                 curBlock.reponse = curInsideBlock;
                             }
-                            if (line.indexOf('{') >= 0) {
-                                state = S_FINDINNBODY;
+                            if (line.indexOf('{') > 0) {
+                                state = S_FindInnerBody;
                                 lastline = i;
                             } else {
-                                state = S_FINDINNST;
+                                state = S_FindInnerStart;
                                 lastline = i;
                             }
+							if (line.indexOf('}') > 0){
+								state = S_FindBody;
+							}
                         } else {
                             // 查找成员定义
                             let member = line.match(/\s*(\w+)\s*([\w\[\]]+)\s*/);
@@ -313,16 +316,16 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
                                     }
                                 }
                                 blocks.push(curBlock);
-                                state = S_FINDDEF;
+                                state = S_FindDef;
                                 lastline = i;
                             }
                         }
-                    } else if (state == S_FINDINNST) {
+                    } else if (state == S_FindInnerStart) {
                         if (line.indexOf('{') >= 0) {
-                            state = S_FINDINNBODY;
+                            state = S_FindInnerBody;
                             lastline = i;
                         }
-                    } else if (state == S_FINDINNBODY) {
+                    } else if (state == S_FindInnerBody) {
                         // 查找内部结构成员定义
                         let member = line.match(/\s*(\w+)\s*([\w\[\]]+)\s*/);
                         if (member && member.length == 3) {
@@ -338,15 +341,15 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
                         }
 
                         if (line.indexOf('}') >= 0) {
-                            state = S_FINDBODY;
+                            state = S_FindBody;
                             lastline = i;
                         }
-                    } else if (state == S_FINDENUMST) {
+                    } else if (state == S_FindEnumStart) {
                         if (line.indexOf('{') >= 0) {
-                            state = S_FINDENUMBODY;
+                            state = S_FindEnumBody;
                             lastline = i;
                         }
-                    } else if (state == S_FINDENUMBODY) {
+                    } else if (state == S_FindEnumBody) {
 
                         let member = line.match(/(\w+)\s*[=]*\s*(\w+)*/);
                         if (member && member.length == 3) {
@@ -358,7 +361,7 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
                         }
                         if (line.indexOf('}') >= 0) {
                             blocks.push(curBlock);
-                            state = S_FINDDEF;
+                            state = S_FindDef;
                             lastline = i;
                         }
                     } // if (state == xxx)
@@ -369,32 +372,32 @@ function parse(fpath: string, typeBuffer: {[key: string]:boolean}) {
     } // for (let i = 0; i < linestrs.length; ++i) 
 
     switch (state) {
-        case S_FINDBODYST:
+        case S_FindBodyStart:
             console.log('解析struct或者protocol失败。 行 ' + lastline);
             return null;
-        case S_FINDBODY:
+        case S_FindBody:
             console.log('解析成员失败。行 ' + lastline);
             return null;
-        case S_FINDINNST:
+        case S_FindInnerStart:
             console.log('解析req或者resp失败。 行 ' + lastline);
             return null;
-        case S_FINDINNBODY:
+        case S_FindInnerBody:
             console.log('解析req或者resp的成员失败。行 ' + lastline);
             return null;
-        case S_FINDENUMBODY:
-        case S_FINDENUMST:
+        case S_FindEnumBody:
+        case S_FindEnumStart:
             console.log('解析enum失败。行 ' + lastline);
             return null;
     }
 
     // 按const, enum, struct, protocol排序
     blocks.sort((a, b) => {
-        let n = a.typeCost() - b.typeCost();
-        if (n == 0){
-            return a.name.localeCompare(b.name);
-        } else {
-            return n;
-        }
+        return a.typeCost() - b.typeCost();
+        //if (n == 0){
+       //    return a.name.localeCompare(b.name);
+       //} else {
+        //    return n;
+        //}
     });
 
     (<any>blocks).rem = protocolRem;
@@ -488,9 +491,11 @@ function makeProtocolTS(blocks: Block[]): string|null{
                 + (j < block.members.length - 1 ? ', ' : '');
         }
 
-        tc.push();
-        ctorSubject += tc.v() + 'this.cmd = ' + blockName + '.cmd' + crlf;
-        tc.pop();
+        if (isProtocol){
+            tc.push();
+            ctorSubject += tc.v() + 'this.cmd = ' + blockName + '.cmd' + crlf;
+            tc.pop();
+        }
 
         outer += tc.v() + ctorSubject.replace('_params_', ctorParams) + crlf;
         outer += tc.v() + '}' + crlf;
@@ -528,7 +533,7 @@ function makeProtocolTS(blocks: Block[]): string|null{
                 printRem(block, 'response');
                 makeStruct(block.reponse, true);
             } else {
-                makeStruct(block, true);
+                makeStruct(block, block.type == 'protocol');
             }
 
         }
